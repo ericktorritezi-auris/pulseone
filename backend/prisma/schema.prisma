@@ -1,0 +1,280 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================
+// ENUMS
+// ==========================
+
+enum UserRole {
+  ADMIN
+  GESTOR
+  COLABORADOR
+}
+
+enum PulseCycleStatus {
+  RASCUNHO
+  ABERTO
+  ENCERRADO
+  EM_CONSOLIDACAO
+  FINALIZADO
+  ARQUIVADO
+}
+
+enum PulseEvaluationType {
+  AUTOAVALIACAO
+  GESTOR
+  COLEGA
+}
+
+enum PulseEvaluationStatus {
+  PENDENTE
+  FINALIZADO
+}
+
+enum PulseReportStatus {
+  EM_ANDAMENTO
+  AGUARDANDO_IA
+  AGUARDANDO_PARECER
+  FINALIZADO
+  ARQUIVADO
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  CADASTRO
+  EDICAO
+  EXCLUSAO
+  FEEDBACK
+  FECHAMENTO
+  GERACAO_IA
+  GERACAO_PDF
+}
+
+// ==========================
+// ENTIDADES PRINCIPAIS
+// ==========================
+
+model User {
+  id            String     @id @default(uuid())
+  fullName      String
+  email         String     @unique
+  emailVerified Boolean    @default(false)
+  phone         String
+  passwordHash  String
+  mustChangePwd Boolean    @default(false)
+  role          UserRole
+  areaId        String
+  area          Area       @relation(fields: [areaId], references: [id])
+  positionId    String
+  position      Position   @relation(fields: [positionId], references: [id])
+  // Gestor é sempre derivado em runtime: usuário ativo com Position.isManager = true
+  // na mesma areaId. Não existe FK manual de gestor (ver PulseTeamService).
+  active        Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  feedbacksSent           Feedback[]              @relation("FeedbackSender")
+  feedbacksReceived       Feedback[]              @relation("FeedbackReceiver")
+  pulseFeedbacksGiven     PulseFeedback[]         @relation("PulseEvaluator")
+  pulseFeedbacksReceived  PulseFeedback[]         @relation("PulseTarget")
+  pulseScores             PulseScore[]
+  pulseReports            PulseReport[]           @relation("ReportOwner")
+  notifications           Notification[]
+  auditLogs               AuditLog[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+}
+
+model Area {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  users     User[]
+  createdAt DateTime @default(now())
+}
+
+model Position {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  isManager Boolean  @default(false)
+  users     User[]
+  createdAt DateTime @default(now())
+}
+
+// ==========================
+// TOKENS DE AUTENTICAÇÃO
+// ==========================
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+// ==========================
+// FEEDBACK CONTÍNUO
+// ==========================
+
+model Feedback {
+  id         String   @id @default(uuid())
+  senderId   String
+  sender     User     @relation("FeedbackSender", fields: [senderId], references: [id])
+  receiverId String
+  receiver   User     @relation("FeedbackReceiver", fields: [receiverId], references: [id])
+  text       String
+  npsScore   Int
+  createdAt  DateTime @default(now())
+}
+
+// ==========================
+// FEEDBACK PULSE (CICLO 360°)
+// ==========================
+
+model PulseCycle {
+  id         String           @id @default(uuid())
+  label      String
+  status     PulseCycleStatus @default(RASCUNHO)
+  openedAt   DateTime?
+  deadline   DateTime?
+  closedAt   DateTime?
+  createdAt  DateTime         @default(now())
+
+  pulseFeedbacks PulseFeedback[]
+  pulseScores    PulseScore[]
+  pulseReports   PulseReport[]
+}
+
+model PulseQuestion {
+  id        String        @id @default(uuid())
+  order     Int
+  text      String
+  dimension String
+  isNps     Boolean       @default(false)
+  active    Boolean       @default(true)
+  answers   PulseAnswer[]
+}
+
+model PulseFeedback {
+  id          String                @id @default(uuid())
+  cycleId     String
+  cycle       PulseCycle            @relation(fields: [cycleId], references: [id])
+  evaluatorId String
+  evaluator   User                  @relation("PulseEvaluator", fields: [evaluatorId], references: [id])
+  targetId    String
+  target      User                  @relation("PulseTarget", fields: [targetId], references: [id])
+  type        PulseEvaluationType
+  status      PulseEvaluationStatus @default(PENDENTE)
+  comment     String?
+  finishedAt  DateTime?
+  createdAt   DateTime              @default(now())
+
+  answers PulseAnswer[]
+
+  @@unique([cycleId, evaluatorId, targetId, type])
+}
+
+model PulseAnswer {
+  id              String        @id @default(uuid())
+  pulseFeedbackId String
+  pulseFeedback   PulseFeedback @relation(fields: [pulseFeedbackId], references: [id])
+  questionId      String
+  question        PulseQuestion @relation(fields: [questionId], references: [id])
+  value           Int
+}
+
+model PulseScore {
+  id           String     @id @default(uuid())
+  cycleId      String
+  cycle        PulseCycle @relation(fields: [cycleId], references: [id])
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  teamScore    Float
+  managerScore Float
+  selfScore    Float
+  finalScore   Float
+  npsScore     Float
+  scoreBand    String
+  createdAt    DateTime   @default(now())
+
+  @@unique([cycleId, userId])
+}
+
+// ==========================
+// PARECER, IA E RELATÓRIO
+// ==========================
+
+model PulseReport {
+  id                  String            @id @default(uuid())
+  cycleId             String
+  cycle               PulseCycle        @relation(fields: [cycleId], references: [id])
+  ownerId             String
+  owner               User              @relation("ReportOwner", fields: [ownerId], references: [id])
+  status              PulseReportStatus @default(EM_ANDAMENTO)
+  managerFinalOpinion String?
+  finalizedById       String?
+  finalizedAt         DateTime?
+  pdfUrl              String?
+  createdAt           DateTime          @default(now())
+
+  aiAnalysis PulseAiAnalysis?
+}
+
+model PulseAiAnalysis {
+  id               String      @id @default(uuid())
+  reportId         String      @unique
+  report           PulseReport @relation(fields: [reportId], references: [id])
+  strengths        String
+  improvements     String
+  trends           String
+  summary          String
+  suggestedOpinion String
+  model            String
+  regenCount       Int         @default(0)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+}
+
+// ==========================
+// NOTIFICAÇÕES E AUDITORIA
+// ==========================
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String      @id @default(uuid())
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id])
+  action    AuditAction
+  entity    String?
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime    @default(now())
+}

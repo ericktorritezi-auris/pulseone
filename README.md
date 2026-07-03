@@ -78,9 +78,21 @@ Ver `docs/mapeamento-tecnico.md` para a lista completa de variáveis (`DATABASE_
 
 ---
 
-## Deploy
+## Deploy (serviço único no Railway)
 
-Aplicação hospedada no **Railway**, com banco **PostgreSQL** provisionado no mesmo projeto. Deploy contínuo a partir da branch `main` via GitHub Actions.
+Backend (NestJS) e frontend (Next.js) rodam **no mesmo serviço Railway**, dentro do mesmo container:
+
+- O **Next.js** ocupa a porta pública (`PORT`, injetada pelo Railway) e faz *proxy* interno de `/api/*` para o backend.
+- O **NestJS** roda em uma porta interna fixa (`INTERNAL_API_PORT=3333`), nunca exposta diretamente.
+- `start.js`, na raiz do repositório, sobe os dois processos juntos.
+
+**Configuração no Railway:**
+- Root Directory: raiz do repositório (não usar `backend` nem `frontend` isoladamente).
+- Build Command: `npm run build`
+- Start Command: `npm start`
+- Variáveis: ver `.env.example` na raiz — é o conjunto único a preencher neste serviço.
+
+Deploy contínuo a partir da branch `main` via GitHub Actions.
 
 ---
 
