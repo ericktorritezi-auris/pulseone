@@ -1,12 +1,30 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
 
 @Injectable()
 export class ResendService {
-  private resend = new Resend(process.env.RESEND_API_KEY);
+  private readonly logger = new Logger(ResendService.name);
+  private resend: Resend | null = null;
   private from = process.env.RESEND_FROM_EMAIL as string;
 
+  constructor() {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      // Não derruba a aplicação: e-mail é uma dependência externa, não deve
+      // impedir o boot do sistema inteiro. Apenas loga e desativa o envio.
+      this.logger.warn(
+        'RESEND_API_KEY não configurada. Envio de e-mails (verificação/reset de senha) está desativado.',
+      );
+      return;
+    }
+    this.resend = new Resend(apiKey);
+  }
+
   async sendEmailVerification(to: string, token: string) {
+    if (!this.resend) {
+      this.logger.warn(`Envio de e-mail de verificação ignorado (Resend não configurado). Destinatário: ${to}`);
+      return null;
+    }
     const link = `${process.env.APP_URL}/verify-email/${token}`;
     return this.resend.emails.send({
       from: this.from,
@@ -19,6 +37,10 @@ export class ResendService {
   }
 
   async sendPasswordReset(to: string, token: string) {
+    if (!this.resend) {
+      this.logger.warn(`Envio de e-mail de reset ignorado (Resend não configurado). Destinatário: ${to}`);
+      return null;
+    }
     const link = `${process.env.APP_URL}/reset-password/${token}`;
     return this.resend.emails.send({
       from: this.from,
