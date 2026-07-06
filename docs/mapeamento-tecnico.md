@@ -1,6 +1,6 @@
 # PULSEONE — MAPEAMENTO TÉCNICO COMPLETO
-**Versão do documento:** 1.1.0
-**Status:** Base para início de desenvolvimento (revisado após correções obrigatórias)
+**Versão do documento:** 1.2.0
+**Status:** Base para início de desenvolvimento (revisado após correções obrigatórias + isolamento por área)
 **Referências aplicadas:** PulseOne_Logomarca > PulseOne_Demo_das_Telas > PulseOne_Design_System > PRD v1.0
 
 **Decisões confirmadas na rodada anterior:**
@@ -8,7 +8,7 @@
 - IA: Anthropic API substitui OpenAI API em todas as menções do PRD.
 - PDF: Puppeteer (HTML→PDF) como solução principal. PDFKit apenas em uso pontual, se necessário.
 
-**Correções obrigatórias aplicadas nesta revisão (v1.1.0):**
+**Correções obrigatórias aplicadas na v1.1.0:**
 1. Autoavaliação passa a ser exibida apenas como referência informativa — **não entra no cálculo do score final**.
 2. Vínculo de gestor deixa de ser um campo manual (`managerId`) e passa a ser **derivado do cargo** (`Position.isManager`) combinado com a área do usuário.
 3. Adicionados tokens de **confirmação de e-mail** e **reset de senha** como entidades próprias (com expiração).
@@ -16,6 +16,12 @@
 5. Regra de visibilidade: colaborador só enxerga resultado do ciclo **após `finalizedAt` preenchido**.
 6. Seed do admin mantido com troca de senha obrigatória no primeiro login.
 7. Modelo da Anthropic API deixa de ser hardcoded e passa a ser **parametrizado via `.env`**.
+
+**Correções obrigatórias aplicadas na v1.2.0 — isolamento por área (implementado antes da Sprint 1):**
+8. **Feedback fechado por área**: avaliação de colegas só ocorre dentro da mesma `areaId`. Ver seção 5.1.
+9. **Dashboard do gestor com evolução da área**: `dashboard/manager` passa a trazer histórico ciclo a ciclo da área, não só o status atual. Ver seção 5.2.
+10. **Cadastro pelo gestor, restrito à própria área**: `GESTOR` ganhou permissão de `POST/GET/PATCH/DELETE /users`, mas toda operação é travada no service pela `areaId` do próprio gestor — mesmo que a requisição tente forçar outro valor. **Já implementado e entregue no código desta rodada.**
+11. **`role` deixou de ser um campo livre no cadastro**: é sempre derivado do cargo (`Position.isManager`) — fonte única de verdade, eliminando a possibilidade de alguém ser cadastrado como gestor/colaborador de forma inconsistente com o cargo escolhido. `ADMIN` só é atribuído explicitamente por outro `ADMIN`. **Já implementado e entregue no código desta rodada.**
 
 ---
 
@@ -538,8 +544,81 @@ RESEND_FROM_EMAIL=                      # ex: naoresponda@pulseone.app.br
 
 ---
 
+## 5. ISOLAMENTO POR ÁREA (v1.2.0)
+
+### 5.1 Feedback fechado por área — `PulseAssignmentService` (a construir na Sprint 3)
+
+Quando o admin muda um `PulseCycle.status` para `ABERTO`, este service roda automaticamente e gera todas as `PulseFeedback` do ciclo, com as seguintes regras:
+
+```
+Para cada Area com colaboradores ativos:
+  membros = usuários ativos daquela area
+
+  // AUTOAVALIAÇÃO — sempre, individual
+  para cada membro em membros:
+    criar PulseFeedback(type=AUTOAVALIACAO, evaluator=membro, target=membro)
+
+  // AVALIAÇÃO DO GESTOR — o gestor da área avalia cada membro (exceto ele mesmo)
+  gestor = resolver gestor da area (Position.isManager = true, mesma areaId)
+  se existir gestor:
+    para cada membro em membros, membro != gestor:
+      criar PulseFeedback(type=GESTOR, evaluator=gestor, target=membro)
+
+  // AVALIAÇÃO DE COLEGAS — todos-contra-todos, SOMENTE dentro da mesma área
+  se membros.length >= 2:
+    para cada par (A, B) em membros, A != B:
+      criar PulseFeedback(type=COLEGA, evaluator=A, target=B)
+  // área com 1 pessoa só: não gera avaliação de colega (não há com quem comparar)
+```
+
+**Trava de segurança na API** (independente da geração automática): o `PulseFeedbackService` rejeita com 403 qualquer tentativa de submeter uma avaliação onde `evaluator.areaId !== target.areaId` — mesmo em caso de bug na geração automática ou requisição manual forjada, o isolamento por área nunca é contornável pela API.
+
+### 5.2 Dashboard do gestor com evolução da área (a construir na Sprint 5, contrato já fechado)
+
+`GET /dashboard/manager` (sempre implicitamente filtrado por `areaId` do gestor logado — nunca aceita parâmetro de área vindo do client) passa a retornar:
+
+```
+{
+  areaAtual: {
+    nome, totalColaboradores, pulseAtivo, pendentes
+  },
+  time: [
+    { userId, nome, statusCicloAtual, scoreAtual, npsAtual }
+  ],
+  evolucaoDaArea: [
+    { ciclo: "Junho/2025", scoreMedio, npsMedio, participacaoPercentual },
+    { ciclo: "Setembro/2025", scoreMedio, npsMedio, participacaoPercentual }
+  ]
+}
+```
+
+`evolucaoDaArea` é calculado agregando `PulseScore` de todos os ciclos `FINALIZADO`/`ARQUIVADO` da área — dá ao gestor a visão de tendência (a área está melhorando ou piorando ciclo a ciclo), não só a fotografia do momento atual.
+
+### 5.3 Cadastro pelo gestor restrito à própria área — **implementado nesta rodada**
+
+`UsersModule` (`backend/src/users/users.module.ts`) foi reescrito com:
+
+- `@Roles(ADMIN, GESTOR)` em todas as rotas de `/users` (antes só `ADMIN`).
+- `UsersService.resolveAreaId()`: se quem cria/edita é `GESTOR`, a área é **sempre** a dele próprio — qualquer `areaId` vindo no corpo da requisição é ignorado nesse caso. Só `ADMIN` pode escolher livremente a área.
+- `UsersService.findAll()` / `findOne()`: `GESTOR` só enxerga pessoas da própria área (`where: { areaId: requester.areaId }`); tentativa de acessar `/users/:id` de outra área retorna 403.
+- `update()` / `remove()`: mesma trava — gestor não edita/inativa ninguém fora da própria área, e não pode mover alguém de área por essa rota.
+
+### 5.4 `role` derivado do cargo — **implementado nesta rodada**
+
+`UsersService.resolveRole()` centraliza a decisão:
+
+- `asAdmin=true` no payload **só tem efeito se quem está criando já é `ADMIN`** — caso contrário, `ForbiddenException`.
+- Caso contrário, o `role` é sempre `GESTOR` ou `COLABORADOR`, decidido automaticamente por `Position.isManager` do cargo escolhido — nunca escolhido livremente no formulário.
+- Isso elimina de vez a possibilidade de uma pessoa ficar com cargo "Analista" (`isManager=false`) mas `role=GESTOR` (ou vice-versa) por erro de preenchimento.
+
+### 5.5 Consequência para o frontend (Sprint 1)
+
+No formulário de "Cadastrar Pessoa": quando quem está logado é `GESTOR`, o campo **Área** vem pré-preenchido com a própria área e **desabilitado** (`disabled`) — não é só uma sugestão de UX, é reforço visual de uma regra que o backend já impõe de qualquer forma. Quando é `ADMIN`, o campo continua livre.
+
+---
+
 ## PRÓXIMO PASSO SUGERIDO
 
-Com as 7 correções obrigatórias aplicadas (autoavaliação informativa, gestor derivado do cargo, tokens de e-mail/reset, status individual do relatório, bloqueio de visibilidade pré-`finalizedAt`, seed do admin mantido e modelo de IA via `.env`), este documento está pronto para validação final.
+Com as 7 correções obrigatórias da v1.1.0 e as 4 correções de isolamento por área da v1.2.0 aplicadas — sendo as duas últimas (cadastro restrito à área e role derivado do cargo) já implementadas e entregues em código —, este documento está pronto para validação final.
 
 Após seu aceite, o próximo movimento é o **Sprint 0**: setup do projeto (estrutura de pastas real, `schema.prisma` rodando com as tabelas revisadas, autenticação com verificação de e-mail e reset de senha funcionais) antes de tocar em qualquer tela visual.
