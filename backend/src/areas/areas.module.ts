@@ -32,26 +32,29 @@ class AreasService {
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN)
 @Controller('areas')
 class AreasController {
   constructor(private areasService: AreasService) {}
 
+  @Roles(UserRole.ADMIN, UserRole.GESTOR)
   @Get()
   findAll() {
     return this.areasService.findAll();
   }
 
+  @Roles(UserRole.ADMIN)
   @Post()
   create(@Body() dto: AreaDto) {
     return this.areasService.create(dto);
   }
 
+  @Roles(UserRole.ADMIN)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: AreaDto) {
     return this.areasService.update(id, dto);
   }
 
+  @Roles(UserRole.ADMIN)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.areasService.remove(id);

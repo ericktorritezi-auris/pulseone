@@ -15,7 +15,10 @@ export class AuthService {
   ) {}
 
   async login(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: { area: true, position: true },
+    });
     if (!user || !user.active) {
       throw new UnauthorizedException('Credenciais inválidas.');
     }
@@ -39,6 +42,9 @@ export class AuthService {
         fullName: user.fullName,
         email: user.email,
         role: user.role,
+        areaId: user.areaId,
+        areaName: user.area.name,
+        positionName: user.position.name,
       },
     };
   }

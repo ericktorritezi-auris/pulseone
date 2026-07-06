@@ -33,26 +33,29 @@ class PositionsService {
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN)
 @Controller('positions')
 class PositionsController {
   constructor(private positionsService: PositionsService) {}
 
+  @Roles(UserRole.ADMIN, UserRole.GESTOR)
   @Get()
   findAll() {
     return this.positionsService.findAll();
   }
 
+  @Roles(UserRole.ADMIN)
   @Post()
   create(@Body() dto: PositionDto) {
     return this.positionsService.create(dto);
   }
 
+  @Roles(UserRole.ADMIN)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: PositionDto) {
     return this.positionsService.update(id, dto);
   }
 
+  @Roles(UserRole.ADMIN)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.positionsService.remove(id);
