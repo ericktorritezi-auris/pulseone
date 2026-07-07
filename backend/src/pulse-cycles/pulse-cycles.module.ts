@@ -249,8 +249,24 @@ class PulseScoreService {
       const teamScore = this.average(colegaScores);
       const managerScore = this.average(gestorScores);
       const selfScore = this.average(selfScores);
-      const finalScore = teamScore * 0.6 + managerScore * 0.4;
       const npsScore = this.average(npsValues);
+
+      // REGRA DE NEGÓCIO (pedido do Erick): se uma vertical não tem NENHUMA
+      // avaliação (ex: gestor sem par pra receber avaliação de colega),
+      // ela precisa ser EXCLUÍDA do cálculo — não contar como nota 0, que
+      // derrubaria o score injustamente por falta de dado, não por
+      // desempenho ruim. O peso da vertical ausente é redistribuído pra
+      // quem tem dado; se as duas tiverem dado, mantém o 60/40 normal.
+      let finalScore: number;
+      if (colegaScores.length > 0 && gestorScores.length > 0) {
+        finalScore = teamScore * 0.6 + managerScore * 0.4;
+      } else if (colegaScores.length > 0) {
+        finalScore = teamScore; // só equipe tem dado — 100% do peso pra ela
+      } else if (gestorScores.length > 0) {
+        finalScore = managerScore; // só gestor tem dado — 100% do peso pra ele
+      } else {
+        finalScore = 0; // nenhuma das duas verticais tem dado (caso extremo)
+      }
 
       await this.prisma.pulseScore.upsert({
         where: { cycleId_userId: { cycleId, userId: targetId } },

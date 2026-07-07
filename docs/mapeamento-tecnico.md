@@ -624,6 +624,12 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 - `PulseReportsService.finalize()`: segunda camada de segurança — só exige `managerFinalOpinion` preenchido se `owner.managerId !== null`.
 - `GET /pulse-reports/:id` retorna `requiresOpinion: boolean`, e o frontend usa isso pra esconder completamente o painel de "Parecer Final do Gestor" nesses casos, mostrando só uma nota explicando a liberação automática — a seção de "Feedbacks Recebidos" (com os comentários da equipe) continua aparecendo normalmente.
 
+### 5.14 Correções de visibilidade prematura e cálculo de score sem par (feedback do Erick em teste real)
+
+**Bug 1 — gestor via o próprio relatório antes da hora:** `assertCanAccessReport` liberava acesso pra um `GESTOR` que fosse dono (`isOwner`) do relatório sem checar status nem consolidação da área — a trava só existia pro `COLABORADOR`. Corrigido extraindo `assertSelfViewReady()`, usada agora pelos dois papéis quando a pessoa está vendo o PRÓPRIO relatório: exige `status=FINALIZADO` **e** área inteira consolidada, sem exceção — inclusive pra quem está no topo da hierarquia (o relatório dele finaliza sozinho, mas ainda espera a área toda antes de ficar visível pra ele mesmo).
+
+**Bug 2 — score injusto quando falta uma vertical:** se `colegaScores` ou `gestorScores` vier vazio (ex: um gestor sem par de mesmo nível pra receber avaliação de colega), a média daquela vertical é `0` por falta de dado — mas a fórmula fixa `teamScore*0.6 + managerScore*0.4` tratava esse `0` como nota real, derrubando o `finalScore` injustamente. Corrigido: o peso é redistribuído dinamicamente — se só uma vertical tem dado, ela recebe 100% do peso; só quando as duas têm dado é que volta ao 60/40 padrão.
+
 **Sprint 5 — Relatório PDF + Dashboards executivos**
 - Template HTML do relatório (tela 5) + geração via Puppeteer.
 - Dashboard Admin completo (tela 4 — participação, pendências, NPS médio, score médio).

@@ -71,7 +71,17 @@ class PulseReportsService {
 
     if (requester.role === UserRole.GESTOR) {
       const isDirectReport = report.owner.managerId === requester.id;
-      if (isOwner || isDirectReport) return;
+      // Consolidando o relatório de um liderado direto: acesso liberado em
+      // qualquer status, precisa pra poder escrever o parecer.
+      if (isDirectReport) return;
+      // Vendo o PRÓPRIO relatório (o gestor também é avaliado por alguém
+      // acima, ou está no topo): aplica exatamente a mesma trava do
+      // colaborador — NUNCA libera automaticamente só por ser "dono".
+      // Esse era o bug: antes bastava isOwner=true pra liberar sem checar nada.
+      if (isOwner) {
+        await this.assertSelfViewReady(report);
+        return;
+      }
       throw new ForbiddenException('Você só pode acessar relatórios dos seus liderados diretos.');
     }
 
@@ -79,8 +89,20 @@ class PulseReportsService {
     if (!isOwner) {
       throw new ForbiddenException('Você só pode acessar o próprio relatório.');
     }
+    await this.assertSelfViewReady(report);
+  }
+
+  // Trava real de auto-visualização, usada tanto por COLABORADOR quanto por
+  // GESTOR vendo o PRÓPRIO relatório: exige o relatório FINALIZADO e a área
+  // inteira consolidada — sem exceção pra quem está no topo da hierarquia
+  // (o relatório dele já finaliza sozinho, mas ainda espera a área toda).
+  private async assertSelfViewReady(report: {
+    cycleId: string;
+    status: PulseReportStatus;
+    owner: { areaId: string };
+  }) {
     if (report.status !== PulseReportStatus.FINALIZADO) {
-      throw new ForbiddenException('Seu relatório ainda não foi finalizado pelo gestor.');
+      throw new ForbiddenException('Seu relatório ainda não foi finalizado.');
     }
     const areaReady = await this.isAreaFullyConsolidated(report.cycleId, report.owner.areaId);
     if (!areaReady) {
