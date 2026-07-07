@@ -43,13 +43,26 @@ class PulseReportsService {
   ) {}
 
   /**
-   * REGRA DE VISIBILIDADE (seção 5.6): colaborador só vê o PRÓPRIO relatório,
-   * e só depois de FINALIZADO. Gestor vê os relatórios dos seus liderados
-   * DIRETOS (managerId aponta pra ele — seção 5.7), em qualquer status,
-   * porque precisa consolidar antes de finalizar. Admin vê tudo, sempre.
+   * REGRA DE VISIBILIDADE (seção 5.6 + ajuste pedido pelo Erick): colaborador
+   * só vê o PRÓPRIO relatório, e só depois que TODA a área estiver com os
+   * relatórios finalizados — não basta o dele estar pronto. Isso evita que
+   * alguém veja o resultado antes de outros da mesma área e troque
+   * informação enquanto o restante ainda está em consolidação. Gestor vê
+   * os relatórios dos seus liderados DIRETOS em qualquer status (precisa,
+   * pra poder consolidar). Admin vê tudo, sempre.
    */
+  private async isAreaFullyConsolidated(cycleId: string, areaId: string): Promise<boolean> {
+    const [total, finalizados] = await Promise.all([
+      this.prisma.pulseReport.count({ where: { cycleId, owner: { areaId } } }),
+      this.prisma.pulseReport.count({
+        where: { cycleId, owner: { areaId }, status: PulseReportStatus.FINALIZADO },
+      }),
+    ]);
+    return total > 0 && total === finalizados;
+  }
+
   private async assertCanAccessReport(
-    report: { ownerId: string; status: PulseReportStatus; owner: { managerId: string | null } },
+    report: { ownerId: string; cycleId: string; status: PulseReportStatus; owner: { managerId: string | null; areaId: string } },
     requester: AuthUser,
   ) {
     if (requester.role === UserRole.ADMIN) return;
@@ -63,12 +76,18 @@ class PulseReportsService {
     }
 
     // COLABORADOR
-    if (isOwner && report.status === PulseReportStatus.FINALIZADO) return;
-    throw new ForbiddenException(
-      isOwner
-        ? 'Seu relatório ainda não foi finalizado pelo gestor.'
-        : 'Você só pode acessar o próprio relatório.',
-    );
+    if (!isOwner) {
+      throw new ForbiddenException('Você só pode acessar o próprio relatório.');
+    }
+    if (report.status !== PulseReportStatus.FINALIZADO) {
+      throw new ForbiddenException('Seu relatório ainda não foi finalizado pelo gestor.');
+    }
+    const areaReady = await this.isAreaFullyConsolidated(report.cycleId, report.owner.areaId);
+    if (!areaReady) {
+      throw new ForbiddenException(
+        'Seu relatório está pronto, mas ainda aguarda a finalização dos relatórios de toda a sua área antes de ser liberado.',
+      );
+    }
   }
 
   // Relatórios dos liderados diretos do gestor logado — é a tela de consolidação.

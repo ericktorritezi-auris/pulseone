@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -14,7 +15,13 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { PulseCycleStatus, PulseEvaluationType, PulseEvaluationStatus, UserRole } from '@prisma/client';
+import {
+  PulseCycleStatus,
+  PulseEvaluationType,
+  PulseEvaluationStatus,
+  PulseReportStatus,
+  UserRole,
+} from '@prisma/client';
 import { IsOptional, IsString, MinLength } from 'class-validator';
 
 class CreateCycleDto {
@@ -348,6 +355,32 @@ class PulseCyclesService {
     return this.prisma.pulseCycle.update({ where: { id }, data: { status: PulseCycleStatus.ARQUIVADO } });
   }
 
+  /**
+   * REGRA DE NEGÓCIO (pedido do Erick): diferente do encerramento das
+   * avaliações (que é só informativo), finalizar o CICLO exige 100% dos
+   * relatórios de TODAS as áreas com status FINALIZADO — senão o ciclo
+   * ficaria travado em EM_CONSOLIDACAO pra sempre. Aqui o bloqueio é real.
+   */
+  async finalize(id: string) {
+    const cycle = await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id } });
+    if (cycle.status !== PulseCycleStatus.EM_CONSOLIDACAO) {
+      throw new ForbiddenException('Só é possível finalizar um ciclo que esteja EM_CONSOLIDACAO.');
+    }
+
+    const [total, finalizados] = await Promise.all([
+      this.prisma.pulseReport.count({ where: { cycleId: id } }),
+      this.prisma.pulseReport.count({ where: { cycleId: id, status: PulseReportStatus.FINALIZADO } }),
+    ]);
+
+    if (total === 0 || finalizados < total) {
+      throw new BadRequestException(
+        `Ainda faltam ${total - finalizados} de ${total} relatório(s) finalizar antes de poder finalizar o ciclo.`,
+      );
+    }
+
+    return this.prisma.pulseCycle.update({ where: { id }, data: { status: PulseCycleStatus.FINALIZADO } });
+  }
+
   // Monitoramento em tempo real (pedido do Erick): percentual de conclusão
   // por área do ciclo, pra o admin decidir quando faz sentido encerrar.
   // É só informativo — o sistema nunca bloqueia o encerramento.
@@ -370,6 +403,46 @@ class PulseCyclesService {
         this.prisma.pulseFeedback.count({ where: { cycleId, evaluatorId: { in: userIds } } }),
         this.prisma.pulseFeedback.count({
           where: { cycleId, evaluatorId: { in: userIds }, status: PulseEvaluationStatus.FINALIZADO },
+        }),
+      ]);
+
+      if (total === 0) continue;
+
+      totalGeral += total;
+      finalizadosGeral += finalizados;
+
+      result.push({
+        areaId: area.id,
+        areaName: area.name,
+        total,
+        finalizados,
+        percentual: Math.round((finalizados / total) * 100),
+      });
+    }
+
+    return {
+      areas: result.sort((a, b) => a.areaName.localeCompare(b.areaName)),
+      percentualGeral: totalGeral > 0 ? Math.round((finalizadosGeral / totalGeral) * 100) : 0,
+    };
+  }
+
+  // Mesma ideia do getProgressByArea, mas medindo PulseReport.status ao
+  // invés de PulseFeedback — é o progresso da fase de CONSOLIDAÇÃO
+  // (parecer do gestor), não da fase de avaliação.
+  async getConsolidationProgressByArea(cycleId: string) {
+    await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id: cycleId } });
+
+    const areas = await this.prisma.area.findMany();
+
+    const result: { areaId: string; areaName: string; total: number; finalizados: number; percentual: number }[] = [];
+    let totalGeral = 0;
+    let finalizadosGeral = 0;
+
+    for (const area of areas) {
+      const [total, finalizados] = await Promise.all([
+        this.prisma.pulseReport.count({ where: { cycleId, owner: { areaId: area.id } } }),
+        this.prisma.pulseReport.count({
+          where: { cycleId, owner: { areaId: area.id }, status: PulseReportStatus.FINALIZADO },
         }),
       ]);
 
@@ -425,6 +498,11 @@ class PulseCyclesController {
     return this.pulseCyclesService.consolidate(id);
   }
 
+  @Patch(':id/finalize')
+  finalize(@Param('id') id: string) {
+    return this.pulseCyclesService.finalize(id);
+  }
+
   @Patch(':id/archive')
   archive(@Param('id') id: string) {
     return this.pulseCyclesService.archive(id);
@@ -433,6 +511,11 @@ class PulseCyclesController {
   @Get(':id/progress')
   getProgress(@Param('id') id: string) {
     return this.pulseCyclesService.getProgressByArea(id);
+  }
+
+  @Get(':id/consolidation-progress')
+  getConsolidationProgress(@Param('id') id: string) {
+    return this.pulseCyclesService.getConsolidationProgressByArea(id);
   }
 }
 

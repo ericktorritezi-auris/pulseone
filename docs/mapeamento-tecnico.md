@@ -604,6 +604,17 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 - **Quem consolida:** só o gestor direto do dono do relatório (ou admin) — o próprio dono nunca gera IA, escreve parecer ou finaliza o próprio relatório, mesmo que ele seja gestor de outras pessoas.
 - Frontend: `/relatorios` (lista, por perfil), `/relatorios/[id]` (capa com score, NPS, barras de composição, comentários, painel de IA, parecer final + botão Finalizar), `/historico` (colaborador vê os próprios ciclos — só abre o relatório completo se `FINALIZADO`).
 
+### 5.12 Liberação em lote por área (pedido do Erick — fecha o desenho da consolidação)
+
+**Problema identificado:** o desenho original liberava cada `PulseReport` individualmente assim que o gestor finalizava aquele parecer específico — o que permitia alguém ver o próprio resultado antes de colegas da mesma área, possibilitando troca de informação indevida antes de todo mundo estar pronto.
+
+**Correção:**
+- `PulseReportsService.isAreaFullyConsolidated(cycleId, areaId)`: verifica se **todos** os `PulseReport` daquela área, naquele ciclo, estão `FINALIZADO`. A visibilidade do colaborador pro próprio relatório agora exige as duas condições: o relatório dele estar `FINALIZADO` **e** a área inteira estar consolidada — nunca antes disso.
+- **Nova ação de ciclo**: `PATCH /pulse-cycles/:id/finalize` (admin, como as demais ações de ciclo) — transiciona `EM_CONSOLIDACAO → FINALIZADO`. Diferente do encerramento das avaliações (que é só informativo), esta ação tem **bloqueio real**: exige 100% dos relatórios de **todas** as áreas finalizados, senão retorna erro explicando quantos faltam.
+- **Consolidação por área é independente**: cada área finaliza seus relatórios no próprio ritmo — não precisa esperar as outras áreas pra a área X ficar liberada pros seus colaboradores. O que exige 100% global é só a transição do **ciclo inteiro** pra `FINALIZADO` (ação do admin), não a liberação individual por área.
+- `GET /pulse-cycles/:id/consolidation-progress` (admin): mesmo formato do `progress` (avaliação), mas medindo `PulseReport.status` — permite o admin ver quantas áreas já estão prontas antes de tentar finalizar o ciclo inteiro.
+- Frontend: tela de Ciclos Pulse ganhou "Ver Consolidação" (progresso por área na fase de parecer) e o botão "Finalizar Ciclo" quando `EM_CONSOLIDACAO`; tela de Relatórios do gestor ganhou uma barra de progresso do próprio time.
+
 **Sprint 5 — Relatório PDF + Dashboards executivos**
 - Template HTML do relatório (tela 5) + geração via Puppeteer.
 - Dashboard Admin completo (tela 4 — participação, pendências, NPS médio, score médio).

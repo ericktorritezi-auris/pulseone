@@ -8,6 +8,7 @@ import { useAuth } from '../../../lib/auth-context';
 import { ReportListItem } from '../../../lib/types';
 import { AvatarInitials } from '../../../components/shared/AvatarInitials';
 import { StatusBadge } from '../../../components/shared/StatusBadge';
+import { ProgressBar } from '../../../components/shared/ProgressBar';
 
 export default function RelatoriosPage() {
   const { user } = useAuth();
@@ -25,6 +26,9 @@ export default function RelatoriosPage() {
 
   if (loading) return <p className="text-sm text-p-neutral">Carregando...</p>;
 
+  const finalizados = items.filter((i) => i.status === 'FINALIZADO').length;
+  const progress = items.length > 0 ? (finalizados / items.length) * 100 : 0;
+
   return (
     <div>
       <h1 className="text-xl font-semibold text-p-primary-dark mb-1">Relatórios</h1>
@@ -33,6 +37,18 @@ export default function RelatoriosPage() {
           ? 'Todos os relatórios de todos os ciclos.'
           : 'Relatórios dos seus liderados diretos, por ciclo.'}
       </p>
+
+      {user?.role === 'GESTOR' && items.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
+          <p className="text-xs text-p-neutral mb-2">
+            Seu progresso de consolidação — {finalizados} de {items.length} finalizados
+          </p>
+          <ProgressBar value={progress} showLabel={false} />
+          <p className="text-xs text-p-neutral mt-2">
+            Os resultados só ficam visíveis pra sua equipe quando toda a área estiver 100% finalizada.
+          </p>
+        </div>
+      )}
 
       {items.length === 0 ? (
         <p className="text-sm text-p-neutral">Nenhum relatório disponível ainda.</p>

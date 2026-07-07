@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, FormEvent } from 'react';
-import { Plus, BarChart3 } from 'lucide-react';
+import { Plus, BarChart3, ClipboardCheck } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { PulseCycle, CycleProgress } from '../../../lib/types';
 import { Drawer } from '../../../components/shared/Drawer';
@@ -12,13 +12,17 @@ const ACTIONS: Record<string, { label: string; action: string; next: string }[]>
   RASCUNHO: [{ label: 'Abrir Ciclo', action: 'open', next: 'ABERTO' }],
   ABERTO: [{ label: 'Encerrar Ciclo', action: 'close', next: 'ENCERRADO' }],
   ENCERRADO: [{ label: 'Consolidar', action: 'consolidate', next: 'EM_CONSOLIDACAO' }],
-  EM_CONSOLIDACAO: [],
+  // Finalizar só é aceito pelo backend com 100% dos relatórios prontos —
+  // aqui é bloqueio de verdade, diferente do Encerrar (que é só informativo).
+  EM_CONSOLIDACAO: [{ label: 'Finalizar Ciclo', action: 'finalize', next: 'FINALIZADO' }],
   FINALIZADO: [{ label: 'Arquivar', action: 'archive', next: 'ARQUIVADO' }],
   ARQUIVADO: [],
 };
 
-// Progresso só faz sentido consultar depois que o ciclo já gerou avaliações.
-const SHOWS_PROGRESS = new Set(['ABERTO', 'ENCERRADO', 'EM_CONSOLIDACAO', 'FINALIZADO', 'ARQUIVADO']);
+// "Ver Progresso" (avaliação) faz sentido depois que o ciclo já gerou avaliações.
+const SHOWS_EVAL_PROGRESS = new Set(['ABERTO', 'ENCERRADO', 'EM_CONSOLIDACAO', 'FINALIZADO', 'ARQUIVADO']);
+// "Ver Consolidação" (parecer do gestor) só faz sentido a partir da consolidação em diante.
+const SHOWS_CONSOLIDATION_PROGRESS = new Set(['EM_CONSOLIDACAO', 'FINALIZADO', 'ARQUIVADO']);
 
 export default function CiclosPulsePage() {
   const [cycles, setCycles] = useState<PulseCycle[]>([]);
@@ -31,7 +35,8 @@ export default function CiclosPulsePage() {
   const [actingId, setActingId] = useState<string | null>(null);
 
   const [progressDrawerOpen, setProgressDrawerOpen] = useState(false);
-  const [progressCycleLabel, setProgressCycleLabel] = useState('');
+  const [progressTitle, setProgressTitle] = useState('');
+  const [progressNote, setProgressNote] = useState('');
   const [progress, setProgress] = useState<CycleProgress | null>(null);
   const [progressLoading, setProgressLoading] = useState(false);
 
@@ -79,12 +84,18 @@ export default function CiclosPulsePage() {
     }
   }
 
-  async function handleViewProgress(cycle: PulseCycle) {
-    setProgressCycleLabel(cycle.label);
+  async function handleViewProgress(cycle: PulseCycle, type: 'evaluation' | 'consolidation') {
+    setProgressTitle(`${type === 'evaluation' ? 'Progresso das Avaliações' : 'Progresso da Consolidação'} — ${cycle.label}`);
+    setProgressNote(
+      type === 'evaluation'
+        ? 'Isso é só informativo — você pode encerrar o ciclo a qualquer momento, mesmo sem 100% em todas as áreas.'
+        : 'Diferente do encerramento das avaliações, "Finalizar Ciclo" só funciona quando TODAS as áreas chegarem a 100% aqui — os relatórios só ficam visíveis pra cada pessoa depois que a área inteira dela estiver finalizada.',
+    );
     setProgressDrawerOpen(true);
     setProgressLoading(true);
     try {
-      setProgress(await api.get<CycleProgress>(`/pulse-cycles/${cycle.id}/progress`));
+      const endpoint = type === 'evaluation' ? 'progress' : 'consolidation-progress';
+      setProgress(await api.get<CycleProgress>(`/pulse-cycles/${cycle.id}/${endpoint}`));
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Erro ao carregar progresso.');
     } finally {
@@ -142,13 +153,22 @@ export default function CiclosPulsePage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-2">
-                    {SHOWS_PROGRESS.has(cycle.status) && (
+                    {SHOWS_EVAL_PROGRESS.has(cycle.status) && (
                       <button
-                        onClick={() => handleViewProgress(cycle)}
+                        onClick={() => handleViewProgress(cycle, 'evaluation')}
                         className="flex items-center gap-1.5 text-xs font-medium text-p-neutral border border-slate-200 px-3 py-1.5 rounded-lg hover:border-p-primary hover:text-p-primary"
                       >
                         <BarChart3 size={14} />
                         Ver Progresso
+                      </button>
+                    )}
+                    {SHOWS_CONSOLIDATION_PROGRESS.has(cycle.status) && (
+                      <button
+                        onClick={() => handleViewProgress(cycle, 'consolidation')}
+                        className="flex items-center gap-1.5 text-xs font-medium text-p-neutral border border-slate-200 px-3 py-1.5 rounded-lg hover:border-p-primary hover:text-p-primary"
+                      >
+                        <ClipboardCheck size={14} />
+                        Ver Consolidação
                       </button>
                     )}
                     {ACTIONS[cycle.status]?.map((a) => (
@@ -216,11 +236,7 @@ export default function CiclosPulsePage() {
         </form>
       </Drawer>
 
-      <Drawer
-        open={progressDrawerOpen}
-        onClose={() => setProgressDrawerOpen(false)}
-        title={`Progresso — ${progressCycleLabel}`}
-      >
+      <Drawer open={progressDrawerOpen} onClose={() => setProgressDrawerOpen(false)} title={progressTitle}>
         {progressLoading && <p className="text-sm text-p-neutral">Carregando...</p>}
 
         {!progressLoading && progress && (
@@ -234,7 +250,7 @@ export default function CiclosPulsePage() {
               <p className="text-xs font-semibold text-p-neutral uppercase mb-3">Por área</p>
               <div className="space-y-4">
                 {progress.areas.length === 0 && (
-                  <p className="text-sm text-p-neutral">Nenhuma avaliação gerada para este ciclo.</p>
+                  <p className="text-sm text-p-neutral">Nenhum dado gerado ainda para este ciclo.</p>
                 )}
                 {progress.areas.map((area) => (
                   <div key={area.areaId}>
@@ -250,10 +266,7 @@ export default function CiclosPulsePage() {
               </div>
             </div>
 
-            <p className="text-xs text-p-neutral">
-              Isso é só informativo — você pode encerrar o ciclo a qualquer momento, mesmo sem 100% em
-              todas as áreas.
-            </p>
+            <p className="text-xs text-p-neutral">{progressNote}</p>
           </div>
         )}
       </Drawer>
