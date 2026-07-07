@@ -83,7 +83,9 @@ export default function RelatorioDetalhePage() {
     setFinalizing(true);
     setError('');
     try {
-      await api.patch(`/pulse-reports/${params.id}/finalize`);
+      // Manda o parecer atual junto — não depende de um clique anterior em
+      // "Salvar rascunho" (era exatamente isso que causava o erro reportado).
+      await api.patch(`/pulse-reports/${params.id}/finalize`, { opinion });
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao finalizar.');

@@ -17,7 +17,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { PulseEvaluationStatus, PulseEvaluationType, PulseReportStatus, UserRole } from '@prisma/client';
-import { IsString, MinLength } from 'class-validator';
+import { IsOptional, IsString, MinLength } from 'class-validator';
 import { AnthropicModule } from '../anthropic/anthropic.module';
 import { AnthropicService } from '../anthropic/anthropic.service';
 
@@ -27,6 +27,12 @@ class SetOpinionDto {
   @IsString()
   @MinLength(1)
   opinion: string;
+}
+
+class FinalizeDto {
+  @IsOptional()
+  @IsString()
+  opinion?: string;
 }
 
 @Injectable()
@@ -247,8 +253,16 @@ class PulseReportsService {
     });
   }
 
-  async finalize(id: string, requester: AuthUser) {
-    const report = await this.getReportForAction(id, requester);
+  async finalize(id: string, opinion: string | undefined, requester: AuthUser) {
+    let report = await this.getReportForAction(id, requester);
+
+    // Segunda camada de segurança: se o parecer vier junto nesta chamada
+    // (ex: o frontend salva e finaliza em sequência), grava antes de checar
+    // — assim não depende só de um clique anterior em "Salvar rascunho".
+    if (opinion && opinion.trim()) {
+      await this.prisma.pulseReport.update({ where: { id }, data: { managerFinalOpinion: opinion } });
+      report = await this.getReportForAction(id, requester);
+    }
 
     if (!report.managerFinalOpinion) {
       throw new BadRequestException('É preciso escrever o parecer final antes de finalizar.');
@@ -334,8 +348,8 @@ class PulseReportsController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.GESTOR)
   @Patch(':id/finalize')
-  finalize(@Param('id') id: string, @Req() req: { user: AuthUser }) {
-    return this.pulseReportsService.finalize(id, req.user);
+  finalize(@Param('id') id: string, @Body() dto: FinalizeDto, @Req() req: { user: AuthUser }) {
+    return this.pulseReportsService.finalize(id, dto?.opinion, req.user);
   }
 }
 
