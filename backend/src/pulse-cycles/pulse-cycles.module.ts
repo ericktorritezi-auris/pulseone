@@ -367,14 +367,15 @@ class PulseCyclesService {
       throw new ForbiddenException('Só é possível finalizar um ciclo que esteja EM_CONSOLIDACAO.');
     }
 
-    const [total, finalizados] = await Promise.all([
-      this.prisma.pulseReport.count({ where: { cycleId: id } }),
-      this.prisma.pulseReport.count({ where: { cycleId: id, status: PulseReportStatus.FINALIZADO } }),
-    ]);
+    const pendentes = await this.prisma.pulseReport.findMany({
+      where: { cycleId: id, status: { not: PulseReportStatus.FINALIZADO } },
+      include: { owner: { select: { fullName: true, role: true } } },
+    });
 
-    if (total === 0 || finalizados < total) {
+    if (pendentes.length > 0) {
+      const nomes = pendentes.map((p) => `${p.owner.fullName} (${p.owner.role})`).join(', ');
       throw new BadRequestException(
-        `Ainda faltam ${total - finalizados} de ${total} relatório(s) finalizar antes de poder finalizar o ciclo.`,
+        `Ainda faltam ${pendentes.length} relatório(s) finalizar antes de poder finalizar o ciclo: ${nomes}.`,
       );
     }
 
@@ -428,35 +429,48 @@ class PulseCyclesService {
 
   // Mesma ideia do getProgressByArea, mas medindo PulseReport.status ao
   // invés de PulseFeedback — é o progresso da fase de CONSOLIDAÇÃO
-  // (parecer do gestor), não da fase de avaliação.
+  // (parecer do gestor), não da fase de avaliação. Inclui os nomes de quem
+  // ainda está pendente, pra dar visibilidade real de quem falta fechar
+  // (e não deixar dúvida se o Admin está sendo contabilizado à toa).
   async getConsolidationProgressByArea(cycleId: string) {
     await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id: cycleId } });
 
     const areas = await this.prisma.area.findMany();
 
-    const result: { areaId: string; areaName: string; total: number; finalizados: number; percentual: number }[] = [];
+    const result: {
+      areaId: string;
+      areaName: string;
+      total: number;
+      finalizados: number;
+      percentual: number;
+      pendentes: { id: string; fullName: string; role: string }[];
+    }[] = [];
     let totalGeral = 0;
     let finalizadosGeral = 0;
 
     for (const area of areas) {
-      const [total, finalizados] = await Promise.all([
-        this.prisma.pulseReport.count({ where: { cycleId, owner: { areaId: area.id } } }),
-        this.prisma.pulseReport.count({
-          where: { cycleId, owner: { areaId: area.id }, status: PulseReportStatus.FINALIZADO },
-        }),
-      ]);
+      const reports = await this.prisma.pulseReport.findMany({
+        where: { cycleId, owner: { areaId: area.id } },
+        include: { owner: { select: { id: true, fullName: true, role: true } } },
+      });
 
-      if (total === 0) continue;
+      if (reports.length === 0) continue;
 
-      totalGeral += total;
+      const finalizados = reports.filter((r) => r.status === PulseReportStatus.FINALIZADO).length;
+      const pendentes = reports
+        .filter((r) => r.status !== PulseReportStatus.FINALIZADO)
+        .map((r) => ({ id: r.owner.id, fullName: r.owner.fullName, role: r.owner.role }));
+
+      totalGeral += reports.length;
       finalizadosGeral += finalizados;
 
       result.push({
         areaId: area.id,
         areaName: area.name,
-        total,
+        total: reports.length,
         finalizados,
-        percentual: Math.round((finalizados / total) * 100),
+        percentual: Math.round((finalizados / reports.length) * 100),
+        pendentes,
       });
     }
 

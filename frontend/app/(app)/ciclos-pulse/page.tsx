@@ -261,6 +261,11 @@ export default function CiclosPulsePage() {
                       </span>
                     </div>
                     <ProgressBar value={area.percentual} showLabel={false} />
+                    {area.pendentes && area.pendentes.length > 0 && (
+                      <p className="text-xs text-p-neutral mt-1">
+                        Faltam: {area.pendentes.map((p) => `${p.fullName} (${p.role})`).join(', ')}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>

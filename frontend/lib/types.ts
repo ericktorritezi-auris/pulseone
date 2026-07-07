@@ -121,6 +121,7 @@ export interface AreaProgress {
   total: number;
   finalizados: number;
   percentual: number;
+  pendentes?: { id: string; fullName: string; role: string }[];
 }
 
 export interface CycleProgress {
