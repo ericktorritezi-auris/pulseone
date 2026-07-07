@@ -521,13 +521,14 @@ RESEND_FROM_EMAIL=                      # ex: naoresponda@pulseone.app.br
 - `GET /dashboard/collaborator` com dados reais de últimos feedbacks recebidos/enviados. Score, NPS de recomendação e evolução por ciclo continuam retornando `null`/vazio de forma explícita até o motor do Pulse (Sprint 3-5).
 - Endpoint auxiliar `GET /feedbacks/recipients`, aberto a qualquer usuário autenticado (diferente de `/users`, restrito a ADMIN/GESTOR) — necessário porque o Feedback Contínuo é livre.
 
-**Sprint 3 — Ciclo Pulse (core do produto)**
-- Lifecycle do ciclo (RASCUNHO → ABERTO → ENCERRADO → EM_CONSOLIDAÇÃO → FINALIZADO → ARQUIVADO).
-- Wizard de avaliação (tela 6): autoavaliação, avaliação do gestor, avaliação de colegas.
-- Regras de anonimato aplicadas na API.
-- Resolução dinâmica de gestor (`Area` + `Position.isManager`) implementada e testada.
-- Cálculo de score: `finalScore = teamScore*0.6 + managerScore*0.4`, com `selfScore` calculado à parte, apenas informativo.
-- `PulseReport.status` transicionando corretamente (`EM_ANDAMENTO` → `AGUARDANDO_IA` → `AGUARDANDO_PARECER` → `FINALIZADO`) e bloqueio de visibilidade ao colaborador antes de `FINALIZADO`.
+**Sprint 3 — Ciclo Pulse (core do produto) ✅ concluída**
+- Lifecycle completo do ciclo: `PulseCyclesModule` (`create`, `open`, `close`, `consolidate`, `archive`), admin-only, com transições de estado validadas.
+- `PulseAssignmentService`: gera automaticamente autoavaliação + avaliação do gestor + avaliação de colegas (todos-contra-todos), fechado por área, ao abrir o ciclo — implementação real da seção 5.1. Cria também o `PulseReport` inicial de cada colaborador e dispara notificações reais de abertura (PRD seção 26).
+- `PulseFeedbacksModule`: listar pendentes/finalizadas, buscar detalhe (com as 5 perguntas oficiais), submeter respostas + comentário (mínimo 200 caracteres). Trava de segurança independente confirma `evaluator.areaId === target.areaId` a cada submissão.
+- `PulseScoreService`: calcula `teamScore`, `managerScore`, `selfScore` (informativo), `finalScore = teamScore*0.6 + managerScore*0.4`, `npsScore` e `scoreBand`, disparado na consolidação do ciclo. Avança `PulseReport.status` para `AGUARDANDO_IA`.
+- **Ajuste de schema**: adicionada constraint única `@@unique([pulseFeedbackId, questionId])` em `PulseAnswer`, permitindo upsert seguro de respostas.
+- Frontend: seletor de avaliações (`/pulse`), wizard completo (`/pulse/[id]`, stepper de 5 perguntas + comentário com contador de caracteres), lista intermediária para múltiplos pendentes do mesmo tipo, e tela admin de Ciclos Pulse com as ações de lifecycle.
+- Regras de anonimato na exibição de resultados consolidados e o bloqueio de visibilidade completo do colaborador antes de `FINALIZADO` ficam para a Sprint 4/5, quando o relatório em si é construído.
 
 **Sprint 4 — Consolidação do Gestor + IA**
 - Tela "Avaliação do Time" (tela 4) + consolidação.
@@ -544,6 +545,7 @@ RESEND_FROM_EMAIL=                      # ex: naoresponda@pulseone.app.br
 - Log de auditoria completo + tela de consulta (admin).
 - QA obrigatório integral (seção 27): lint, typecheck, build, responsividade, acessibilidade, testes unit/integration/API/permissions/migration, segurança (JWT, hash, CSRF, SQL injection, XSS), regressão.
 - Empacotamento: changelog, versão, relatório QA, tabela de arquivos alterados, ZIP, instruções GitHub e Railway.
+- **Reset pré-lançamento (checklist obrigatório antes de qualquer uso real — pedido explícito do Erick):** rodar um script de limpeza definitivo, executado uma única vez, que apaga *todos* os dados de teste — pessoas (exceto o cadastro do admin), áreas, cargos, feedbacks contínuos, ciclos Pulse, avaliações, relatórios, notificações e audit logs — deixando o banco só com o admin e as 5 perguntas oficiais (que são fixas do PRD, não teste). O script será protegido por confirmação explícita (ex: variável de ambiente `CONFIRM_RESET=yes-i-am-sure` exigida para rodar), justamente para não haver risco de disparo acidental em produção com dados reais depois do lançamento. A construir junto com o fechamento da Sprint 6, ou antes, se preferir.
 
 ---
 

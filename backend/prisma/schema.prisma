@@ -200,6 +200,8 @@ model PulseAnswer {
   questionId      String
   question        PulseQuestion @relation(fields: [questionId], references: [id])
   value           Int
+
+  @@unique([pulseFeedbackId, questionId])
 }
 
 model PulseScore {

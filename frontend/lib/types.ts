@@ -64,3 +64,35 @@ export interface CollaboratorDashboard {
   ultimosRecebidos: Feedback[];
   ultimosEnviados: Feedback[];
 }
+
+export interface PulseQuestion {
+  id: string;
+  order: number;
+  text: string;
+  dimension: string;
+  isNps: boolean;
+}
+
+export interface PulseCycle {
+  id: string;
+  label: string;
+  status: string;
+  openedAt: string | null;
+  deadline: string | null;
+  closedAt: string | null;
+  createdAt: string;
+}
+
+export interface PendingPulseFeedback {
+  id: string;
+  type: 'AUTOAVALIACAO' | 'GESTOR' | 'COLEGA';
+  status: string;
+  target: { fullName: string };
+  cycle: { label: string; status: string };
+}
+
+export interface PulseFeedbackDetail extends PendingPulseFeedback {
+  comment: string | null;
+  answers: { questionId: string; value: number }[];
+  questions: PulseQuestion[];
+}
