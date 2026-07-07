@@ -77,8 +77,13 @@ class PulseAssignmentService {
         reportsToCreate.push({ cycleId, ownerId: member.id });
       }
 
-      // Avaliação do Gestor — cada pessoa é avaliada pelo seu managerId direto.
-      // Um gestor só avalia quem tem managerId apontando pra ele, nunca a área toda.
+      // Avaliação do Gestor — MÃO DUPLA: o gestor avalia cada liderado direto
+      // (managerId aponta pra ele) E cada liderado também avalia o próprio
+      // gestor direto de volta. O cálculo de score (PulseScoreService) já
+      // agrupa por targetId, então cada direção alimenta o score da pessoa
+      // certa automaticamente: a avaliação do gestor sobre o liderado conta
+      // pro managerScore do liderado; a avaliação do liderado sobre o gestor
+      // conta pro managerScore do próprio gestor (vindo de quem reporta a ele).
       for (const member of members) {
         if (!member.managerId) continue;
         const manager = members.find((m) => m.id === member.managerId);
@@ -88,6 +93,12 @@ class PulseAssignmentService {
           cycleId,
           evaluatorId: manager.id,
           targetId: member.id,
+          type: PulseEvaluationType.GESTOR,
+        });
+        feedbacksToCreate.push({
+          cycleId,
+          evaluatorId: member.id,
+          targetId: manager.id,
           type: PulseEvaluationType.GESTOR,
         });
       }

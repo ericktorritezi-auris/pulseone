@@ -84,6 +84,7 @@ class PulseFeedbacksService {
 
     return items.map((f) => ({
       id: f.id,
+      cycleId: f.cycleId,
       type: f.type,
       status: f.status,
       target: f.target,

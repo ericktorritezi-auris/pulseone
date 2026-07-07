@@ -555,6 +555,12 @@ RESEND_FROM_EMAIL=                      # ex: naoresponda@pulseone.app.br
 - **Endpoint novo:** `GET /users/managers?areaId=X&excludeUserId=Y` — lista de possíveis gestores diretos (role=GESTOR, ativos, mesma área) pro dropdown do formulário.
 - **Frontend:** campo "Gestor Direto" no formulário de Cadastro de Pessoas, recarregado dinamicamente conforme a área selecionada; coluna "Gestor Direto" adicionada à tabela de Pessoas.
 
+### 5.8 Avaliação do Gestor em mão dupla + organização por ciclo (feedback do Erick em teste real)
+
+**Bug corrigido:** a avaliação do tipo GESTOR só era gerada em uma direção (gestor avalia liderado). Faltava a volta: o liderado também avalia o próprio gestor direto — exatamente o que a tela já sugeria ("Avaliação do Gestor — Avalie seu gestor"). `PulseAssignmentService.generateForCycle` agora gera as duas pontas para cada par `managerId`. O `PulseScoreService` já agrupa por `targetId`, então cada direção alimenta o score da pessoa certa automaticamente: a avaliação do gestor sobre o liderado conta pro `managerScore` do liderado; a avaliação do liderado sobre o gestor conta pro `managerScore` do próprio gestor (vindo de quem reporta a ele).
+
+**Organização por ciclo:** `GET /pulse-feedbacks/mine` agora retorna `cycleId` em cada item. A tela `/pulse` passou a: mostrar só o ciclo `ABERTO` solto na tela (agrupado por tipo, como antes); qualquer ciclo que já não está mais `ABERTO` vira uma "pastinha" clicável em "Ciclos anteriores", levando pra `/pulse/ciclo/[cycleId]` (somente consulta). Extraído um componente `PulseItemsByType` compartilhado entre a tela principal e a pastinha de histórico, pra não duplicar a renderização.
+
 **Sprint 4 — Consolidação do Gestor + IA**
 - Tela "Avaliação do Time" (tela 4) + consolidação.
 - Integração Anthropic API para geração de análise (pontos fortes/melhoria/tendências/parecer sugerido), com persistência e regeneração.
