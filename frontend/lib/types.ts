@@ -175,6 +175,7 @@ export interface ReportDetail {
   status: string;
   managerFinalOpinion: string | null;
   finalizedAt: string | null;
+  requiresOpinion: boolean;
   owner: { id: string; fullName: string; areaName: string; positionName: string };
   cycle: { label: string; status: string };
   score: PulseScoreSummary | null;

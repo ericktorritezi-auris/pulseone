@@ -213,50 +213,61 @@ export default function RelatorioDetalhePage() {
         </div>
       )}
 
-      {/* Parecer final do gestor */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <h2 className="text-sm font-semibold text-p-primary-dark mb-3">Parecer Final do Gestor</h2>
+      {/* Parecer final do gestor — não se aplica a quem está no topo da
+          hierarquia (sem gestor direto). Essa pessoa só precisa ver as
+          avaliações recebidas, sem depender de um parecer escrito. */}
+      {report.requiresOpinion ? (
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <h2 className="text-sm font-semibold text-p-primary-dark mb-3">Parecer Final do Gestor</h2>
 
-        {canConsolidate && !isFinalized ? (
-          <>
-            <textarea
-              rows={6}
-              value={opinion}
-              onChange={(e) => setOpinion(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none"
-              placeholder="Escreva o parecer final sobre o desempenho desta pessoa no ciclo..."
-            />
-            {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={handleSaveOpinion}
-                disabled={savingOpinion || !opinion.trim()}
-                className="px-4 py-2 border border-slate-300 text-p-primary-dark rounded-lg text-sm font-medium disabled:opacity-50"
-              >
-                {savingOpinion ? 'Salvando...' : 'Salvar rascunho'}
-              </button>
-              <button
-                onClick={handleFinalize}
-                disabled={finalizing || !opinion.trim()}
-                className="px-4 py-2 bg-p-primary text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
-              >
-                {finalizing ? 'Finalizando...' : 'Finalizar Relatório'}
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="text-sm text-p-primary-dark whitespace-pre-wrap">
-              {report.managerFinalOpinion || 'Parecer ainda não escrito.'}
-            </p>
-            {report.finalizedAt && (
-              <p className="text-xs text-p-neutral mt-3">
-                Finalizado em {new Date(report.finalizedAt).toLocaleDateString('pt-BR')}
+          {canConsolidate && !isFinalized ? (
+            <>
+              <textarea
+                rows={6}
+                value={opinion}
+                onChange={(e) => setOpinion(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none"
+                placeholder="Escreva o parecer final sobre o desempenho desta pessoa no ciclo..."
+              />
+              {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+              <div className="flex gap-3 mt-4">
+                <button
+                  onClick={handleSaveOpinion}
+                  disabled={savingOpinion || !opinion.trim()}
+                  className="px-4 py-2 border border-slate-300 text-p-primary-dark rounded-lg text-sm font-medium disabled:opacity-50"
+                >
+                  {savingOpinion ? 'Salvando...' : 'Salvar rascunho'}
+                </button>
+                <button
+                  onClick={handleFinalize}
+                  disabled={finalizing || !opinion.trim()}
+                  className="px-4 py-2 bg-p-primary text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                >
+                  {finalizing ? 'Finalizando...' : 'Finalizar Relatório'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-p-primary-dark whitespace-pre-wrap">
+                {report.managerFinalOpinion || 'Parecer ainda não escrito.'}
               </p>
-            )}
-          </>
-        )}
-      </div>
+              {report.finalizedAt && (
+                <p className="text-xs text-p-neutral mt-3">
+                  Finalizado em {new Date(report.finalizedAt).toLocaleDateString('pt-BR')}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <p className="text-sm text-p-neutral">
+            Como não há ninguém acima na hierarquia pra escrever um parecer, este relatório é
+            liberado automaticamente com base nas avaliações recebidas — sem parecer final.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

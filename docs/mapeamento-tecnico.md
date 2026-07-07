@@ -613,7 +613,16 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 - **Nova ação de ciclo**: `PATCH /pulse-cycles/:id/finalize` (admin, como as demais ações de ciclo) — transiciona `EM_CONSOLIDACAO → FINALIZADO`. Diferente do encerramento das avaliações (que é só informativo), esta ação tem **bloqueio real**: exige 100% dos relatórios de **todas** as áreas finalizados, senão retorna erro explicando quantos faltam.
 - **Consolidação por área é independente**: cada área finaliza seus relatórios no próprio ritmo — não precisa esperar as outras áreas pra a área X ficar liberada pros seus colaboradores. O que exige 100% global é só a transição do **ciclo inteiro** pra `FINALIZADO` (ação do admin), não a liberação individual por área.
 - `GET /pulse-cycles/:id/consolidation-progress` (admin): mesmo formato do `progress` (avaliação), mas medindo `PulseReport.status` — permite o admin ver quantas áreas já estão prontas antes de tentar finalizar o ciclo inteiro.
-- Frontend: tela de Ciclos Pulse ganhou "Ver Consolidação" (progresso por área na fase de parecer) e o botão "Finalizar Ciclo" quando `EM_CONSOLIDACAO`; tela de Relatórios do gestor ganhou uma barra de progresso do próprio time.
+- Frontend: tela de Ciclos Pulse ganhou "Ver Consolidação" (progresso por área na fase de parecer, agora com os **nomes de quem está pendente**, não só a contagem) e o botão "Finalizar Ciclo" quando `EM_CONSOLIDACAO`; tela de Relatórios do gestor ganhou uma barra de progresso do próprio time.
+
+### 5.13 Topo da hierarquia não precisa de parecer final (pedido do Erick)
+
+**Regra:** quem está no topo da hierarquia (`managerId = null`, ex: um Diretor sem ninguém acima no sistema) não precisa de parecer final escrito por ninguém — ele só precisa ver as avaliações que o próprio time deu sobre ele. Faz sentido: não há quem escreva esse parecer, já que ninguém está numa posição hierárquica acima dele.
+
+**Implementação:**
+- `PulseScoreService.computeForCycle`: ao calcular o score de alguém sem `managerId`, o `PulseReport` já sai direto como `FINALIZADO` (com `finalizedAt` preenchido) — pulando `AGUARDANDO_IA`/`AGUARDANDO_PARECER` inteiramente, sem depender de nenhuma ação manual do admin.
+- `PulseReportsService.finalize()`: segunda camada de segurança — só exige `managerFinalOpinion` preenchido se `owner.managerId !== null`.
+- `GET /pulse-reports/:id` retorna `requiresOpinion: boolean`, e o frontend usa isso pra esconder completamente o painel de "Parecer Final do Gestor" nesses casos, mostrando só uma nota explicando a liberação automática — a seção de "Feedbacks Recebidos" (com os comentários da equipe) continua aparecendo normalmente.
 
 **Sprint 5 — Relatório PDF + Dashboards executivos**
 - Template HTML do relatório (tela 5) + geração via Puppeteer.

@@ -179,6 +179,10 @@ class PulseReportsService {
       status: report.status,
       managerFinalOpinion: report.managerFinalOpinion,
       finalizedAt: report.finalizedAt,
+      // Quem está no topo da hierarquia (sem gestor direto) não precisa de
+      // parecer final — pedido do Erick. O frontend usa isso pra esconder
+      // o painel de parecer e mostrar só as avaliações recebidas.
+      requiresOpinion: report.owner.managerId !== null,
       owner: {
         id: report.owner.id,
         fullName: report.owner.fullName,
@@ -283,7 +287,13 @@ class PulseReportsService {
       report = await this.getReportForAction(id, requester);
     }
 
-    if (!report.managerFinalOpinion) {
+    // Quem está no topo da hierarquia (sem gestor direto) não precisa de
+    // parecer final — ninguém está acima dele pra escrever isso. Já sai
+    // auto-finalizado na consolidação, mas esta é uma segunda camada de
+    // segurança caso alguém tente agir manualmente antes disso.
+    const requiresOpinion = report.owner.managerId !== null;
+
+    if (requiresOpinion && !report.managerFinalOpinion) {
       throw new BadRequestException('É preciso escrever o parecer final antes de finalizar.');
     }
     if (report.status === PulseReportStatus.FINALIZADO) {
