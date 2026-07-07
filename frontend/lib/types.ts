@@ -56,15 +56,6 @@ export interface Notification {
   createdAt: string;
 }
 
-export interface CollaboratorDashboard {
-  score: number | null;
-  scoreEvolution: { ciclo: string; score: number }[];
-  npsRecomendacao: number | null;
-  pulseAtual: string | null;
-  ultimosRecebidos: Feedback[];
-  ultimosEnviados: Feedback[];
-}
-
 export interface PulseQuestion {
   id: string;
   order: number;
@@ -89,10 +80,51 @@ export interface PendingPulseFeedback {
   status: string;
   target: { fullName: string };
   cycle: { label: string; status: string };
+  editable?: boolean;
 }
 
 export interface PulseFeedbackDetail extends PendingPulseFeedback {
   comment: string | null;
   answers: { questionId: string; value: number }[];
   questions: PulseQuestion[];
+  editable: boolean;
+}
+
+export interface PulseAtual {
+  label: string;
+  deadline: string | null;
+  pendentes: number;
+  total: number;
+}
+
+export interface CollaboratorDashboard {
+  score: number | null;
+  scoreEvolution: { ciclo: string; score: number }[];
+  npsRecomendacao: number | null;
+  pulseAtual: PulseAtual | null;
+  ultimosRecebidos: Feedback[];
+  ultimosEnviados: Feedback[];
+}
+
+
+export interface AreaProgress {
+  areaId: string;
+  areaName: string;
+  total: number;
+  finalizados: number;
+  percentual: number;
+}
+
+export interface CycleProgress {
+  areas: AreaProgress[];
+  percentualGeral: number;
+}
+
+export interface TeamMemberProgress {
+  userId: string;
+  fullName: string;
+  role: string;
+  total: number;
+  finalizados: number;
+  percentual: number;
 }

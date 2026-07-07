@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Check } from 'lucide-react';
+import { Check, Lock } from 'lucide-react';
 import { api } from '../../../../lib/api';
 import { PulseFeedbackDetail } from '../../../../lib/types';
 
@@ -35,6 +35,7 @@ export default function PulseWizardPage() {
   if (loading) return <p className="text-sm text-p-neutral">Carregando...</p>;
   if (!detail) return <p className="text-sm text-red-600">Avaliação não encontrada.</p>;
 
+  const readOnly = !detail.editable;
   const questions = detail.questions;
   const totalSteps = questions.length + 1; // + comentário
   const isCommentStep = step === questions.length;
@@ -77,7 +78,22 @@ export default function PulseWizardPage() {
 
   return (
     <div className="max-w-xl">
-      <h1 className="text-xl font-semibold text-p-primary-dark mb-1">Avaliar: {detail.target.fullName}</h1>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-xl font-semibold text-p-primary-dark">
+          {readOnly ? 'Visualizar avaliação: ' : 'Avaliar: '}
+          {detail.target.fullName}
+        </h1>
+        {readOnly && (
+          <span className="flex items-center gap-1 text-xs text-p-neutral">
+            <Lock size={12} /> Somente leitura
+          </span>
+        )}
+      </div>
+      {readOnly && (
+        <p className="text-xs text-p-neutral mb-2">
+          O ciclo foi encerrado pelo administrador — esta avaliação não pode mais ser editada.
+        </p>
+      )}
 
       {/* Stepper de abas */}
       <div className="flex flex-wrap gap-2 mb-6 mt-4">
@@ -123,12 +139,13 @@ export default function PulseWizardPage() {
               {Array.from({ length: 11 }, (_, n) => n).map((n) => (
                 <button
                   key={n}
-                  onClick={() => setValues({ ...values, [currentQuestion.id]: n })}
+                  onClick={() => !readOnly && setValues({ ...values, [currentQuestion.id]: n })}
+                  disabled={readOnly}
                   className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
                     values[currentQuestion.id] === n
                       ? 'bg-p-primary text-white border-p-primary'
                       : 'border-slate-200 text-p-neutral hover:border-p-primary'
-                  }`}
+                  } ${readOnly ? 'opacity-70 cursor-not-allowed hover:border-slate-200' : ''}`}
                 >
                   {n}
                 </button>
@@ -140,18 +157,23 @@ export default function PulseWizardPage() {
         {isCommentStep && (
           <div>
             <p className="text-sm font-medium text-p-primary-dark mb-2">
-              Comentário (mín. {MIN_COMMENT_LENGTH} caracteres)
+              Comentário {!readOnly && `(mín. ${MIN_COMMENT_LENGTH} caracteres)`}
             </p>
             <textarea
               rows={7}
               value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none"
+              onChange={(e) => !readOnly && setComment(e.target.value)}
+              readOnly={readOnly}
+              className={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none ${
+                readOnly ? 'bg-slate-50 text-p-neutral' : ''
+              }`}
               placeholder="Escreva um feedback construtivo, específico e respeitoso..."
             />
-            <p className={`text-xs mt-1 ${comment.length < MIN_COMMENT_LENGTH ? 'text-red-500' : 'text-p-success'}`}>
-              {comment.length} caracteres
-            </p>
+            {!readOnly && (
+              <p className={`text-xs mt-1 ${comment.length < MIN_COMMENT_LENGTH ? 'text-red-500' : 'text-p-success'}`}>
+                {comment.length} caracteres
+              </p>
+            )}
           </div>
         )}
 
@@ -166,7 +188,15 @@ export default function PulseWizardPage() {
             Voltar
           </button>
 
-          {!isCommentStep ? (
+          {readOnly ? (
+            <button
+              onClick={() => goToStep(Math.min(step + 1, totalSteps - 1))}
+              disabled={step === totalSteps - 1}
+              className="px-5 py-2 text-sm text-p-neutral disabled:opacity-40"
+            >
+              Próxima
+            </button>
+          ) : !isCommentStep ? (
             <button
               onClick={handleNext}
               className="px-5 py-2 bg-p-primary text-white rounded-lg text-sm font-medium hover:opacity-90"

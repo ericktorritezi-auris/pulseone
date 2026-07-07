@@ -69,6 +69,29 @@ class PulseFeedbacksService {
     });
   }
 
+  // Lista unificada (pendentes + finalizadas) para a tela "Minhas Avaliações":
+  // enquanto o ciclo estiver ABERTO, tudo que já foi respondido pode ser
+  // reaberto e editado. Depois de ENCERRADO, vira somente leitura.
+  async findMine(userId: string) {
+    const items = await this.prisma.pulseFeedback.findMany({
+      where: { evaluatorId: userId },
+      include: {
+        target: { select: { fullName: true } },
+        cycle: { select: { label: true, status: true } },
+      },
+      orderBy: [{ createdAt: 'asc' }],
+    });
+
+    return items.map((f) => ({
+      id: f.id,
+      type: f.type,
+      status: f.status,
+      target: f.target,
+      cycle: f.cycle,
+      editable: f.cycle.status === PulseCycleStatus.ABERTO,
+    }));
+  }
+
   async findOne(id: string, requester: AuthUser) {
     const feedback = await this.prisma.pulseFeedback.findUnique({
       where: { id },
@@ -89,7 +112,7 @@ class PulseFeedbacksService {
       orderBy: { order: 'asc' },
     });
 
-    return { ...feedback, questions };
+    return { ...feedback, questions, editable: feedback.cycle.status === PulseCycleStatus.ABERTO };
   }
 
   async submitAnswers(id: string, dto: SubmitAnswersDto, requester: AuthUser) {
@@ -153,6 +176,11 @@ class PulseFeedbacksController {
   @Get('finished')
   findFinished(@Req() req: { user: AuthUser }) {
     return this.pulseFeedbacksService.findFinished(req.user.id);
+  }
+
+  @Get('mine')
+  findMine(@Req() req: { user: AuthUser }) {
+    return this.pulseFeedbacksService.findMine(req.user.id);
   }
 
   @Get(':id')

@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState, FormEvent } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, BarChart3 } from 'lucide-react';
 import { api } from '../../../lib/api';
-import { PulseCycle } from '../../../lib/types';
+import { PulseCycle, CycleProgress } from '../../../lib/types';
 import { Drawer } from '../../../components/shared/Drawer';
 import { StatusBadge } from '../../../components/shared/StatusBadge';
+import { ProgressBar } from '../../../components/shared/ProgressBar';
 
 const ACTIONS: Record<string, { label: string; action: string; next: string }[]> = {
   RASCUNHO: [{ label: 'Abrir Ciclo', action: 'open', next: 'ABERTO' }],
@@ -16,6 +17,9 @@ const ACTIONS: Record<string, { label: string; action: string; next: string }[]>
   ARQUIVADO: [],
 };
 
+// Progresso só faz sentido consultar depois que o ciclo já gerou avaliações.
+const SHOWS_PROGRESS = new Set(['ABERTO', 'ENCERRADO', 'EM_CONSOLIDACAO', 'FINALIZADO', 'ARQUIVADO']);
+
 export default function CiclosPulsePage() {
   const [cycles, setCycles] = useState<PulseCycle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,6 +29,11 @@ export default function CiclosPulsePage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
+
+  const [progressDrawerOpen, setProgressDrawerOpen] = useState(false);
+  const [progressCycleLabel, setProgressCycleLabel] = useState('');
+  const [progress, setProgress] = useState<CycleProgress | null>(null);
+  const [progressLoading, setProgressLoading] = useState(false);
 
   async function loadData() {
     setLoading(true);
@@ -67,6 +76,19 @@ export default function CiclosPulsePage() {
       alert(err instanceof Error ? err.message : 'Erro ao executar ação.');
     } finally {
       setActingId(null);
+    }
+  }
+
+  async function handleViewProgress(cycle: PulseCycle) {
+    setProgressCycleLabel(cycle.label);
+    setProgressDrawerOpen(true);
+    setProgressLoading(true);
+    try {
+      setProgress(await api.get<CycleProgress>(`/pulse-cycles/${cycle.id}/progress`));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao carregar progresso.');
+    } finally {
+      setProgressLoading(false);
     }
   }
 
@@ -120,6 +142,15 @@ export default function CiclosPulsePage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-2">
+                    {SHOWS_PROGRESS.has(cycle.status) && (
+                      <button
+                        onClick={() => handleViewProgress(cycle)}
+                        className="flex items-center gap-1.5 text-xs font-medium text-p-neutral border border-slate-200 px-3 py-1.5 rounded-lg hover:border-p-primary hover:text-p-primary"
+                      >
+                        <BarChart3 size={14} />
+                        Ver Progresso
+                      </button>
+                    )}
                     {ACTIONS[cycle.status]?.map((a) => (
                       <button
                         key={a.action}
@@ -183,6 +214,48 @@ export default function CiclosPulsePage() {
             </button>
           </div>
         </form>
+      </Drawer>
+
+      <Drawer
+        open={progressDrawerOpen}
+        onClose={() => setProgressDrawerOpen(false)}
+        title={`Progresso — ${progressCycleLabel}`}
+      >
+        {progressLoading && <p className="text-sm text-p-neutral">Carregando...</p>}
+
+        {!progressLoading && progress && (
+          <div className="space-y-5">
+            <div className="bg-p-primary/5 rounded-xl p-4">
+              <p className="text-xs text-p-neutral mb-1">Progresso geral da organização</p>
+              <ProgressBar value={progress.percentualGeral} />
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-p-neutral uppercase mb-3">Por área</p>
+              <div className="space-y-4">
+                {progress.areas.length === 0 && (
+                  <p className="text-sm text-p-neutral">Nenhuma avaliação gerada para este ciclo.</p>
+                )}
+                {progress.areas.map((area) => (
+                  <div key={area.areaId}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="font-medium text-p-primary-dark">{area.areaName}</span>
+                      <span className="text-p-neutral">
+                        {area.finalizados}/{area.total}
+                      </span>
+                    </div>
+                    <ProgressBar value={area.percentual} showLabel={false} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-xs text-p-neutral">
+              Isso é só informativo — você pode encerrar o ciclo a qualquer momento, mesmo sem 100% em
+              todas as áreas.
+            </p>
+          </div>
+        )}
       </Drawer>
     </div>
   );

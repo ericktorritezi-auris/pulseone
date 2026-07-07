@@ -317,6 +317,51 @@ class PulseCyclesService {
     }
     return this.prisma.pulseCycle.update({ where: { id }, data: { status: PulseCycleStatus.ARQUIVADO } });
   }
+
+  // Monitoramento em tempo real (pedido do Erick): percentual de conclusão
+  // por área do ciclo, pra o admin decidir quando faz sentido encerrar.
+  // É só informativo — o sistema nunca bloqueia o encerramento.
+  async getProgressByArea(cycleId: string) {
+    await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id: cycleId } });
+
+    const areas = await this.prisma.area.findMany({
+      include: { users: { where: { active: true }, select: { id: true } } },
+    });
+
+    const result: { areaId: string; areaName: string; total: number; finalizados: number; percentual: number }[] = [];
+    let totalGeral = 0;
+    let finalizadosGeral = 0;
+
+    for (const area of areas) {
+      const userIds = area.users.map((u) => u.id);
+      if (userIds.length === 0) continue;
+
+      const [total, finalizados] = await Promise.all([
+        this.prisma.pulseFeedback.count({ where: { cycleId, evaluatorId: { in: userIds } } }),
+        this.prisma.pulseFeedback.count({
+          where: { cycleId, evaluatorId: { in: userIds }, status: PulseEvaluationStatus.FINALIZADO },
+        }),
+      ]);
+
+      if (total === 0) continue;
+
+      totalGeral += total;
+      finalizadosGeral += finalizados;
+
+      result.push({
+        areaId: area.id,
+        areaName: area.name,
+        total,
+        finalizados,
+        percentual: Math.round((finalizados / total) * 100),
+      });
+    }
+
+    return {
+      areas: result.sort((a, b) => a.areaName.localeCompare(b.areaName)),
+      percentualGeral: totalGeral > 0 ? Math.round((finalizadosGeral / totalGeral) * 100) : 0,
+    };
+  }
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -353,6 +398,11 @@ class PulseCyclesController {
   @Patch(':id/archive')
   archive(@Param('id') id: string) {
     return this.pulseCyclesService.archive(id);
+  }
+
+  @Get(':id/progress')
+  getProgress(@Param('id') id: string) {
+    return this.pulseCyclesService.getProgressByArea(id);
   }
 }
 

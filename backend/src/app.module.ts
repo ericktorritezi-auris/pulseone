@@ -9,6 +9,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { PulseCyclesModule } from './pulse-cycles/pulse-cycles.module';
 import { PulseFeedbacksModule } from './pulse-feedbacks/pulse-feedbacks.module';
+import { PulseTeamModule } from './pulse-team/pulse-team.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { PulseFeedbacksModule } from './pulse-feedbacks/pulse-feedbacks.module';
     DashboardModule,
     PulseCyclesModule,
     PulseFeedbacksModule,
+    PulseTeamModule,
   ],
 })
 export class AppModule {}

@@ -530,6 +530,16 @@ RESEND_FROM_EMAIL=                      # ex: naoresponda@pulseone.app.br
 - Frontend: seletor de avaliações (`/pulse`), wizard completo (`/pulse/[id]`, stepper de 5 perguntas + comentário com contador de caracteres), lista intermediária para múltiplos pendentes do mesmo tipo, e tela admin de Ciclos Pulse com as ações de lifecycle.
 - Regras de anonimato na exibição de resultados consolidados e o bloqueio de visibilidade completo do colaborador antes de `FINALIZADO` ficam para a Sprint 4/5, quando o relatório em si é construído.
 
+**Ajustes pós-Sprint-3 (feedback do Erick em teste real):**
+- **Bug corrigido**: `GET /dashboard/collaborator` retornava `pulseAtual: null` sempre (hardcoded desde a Sprint 2). Agora consulta o ciclo `ABERTO` de verdade e retorna label, prazo e progresso (`pendentes`/`total`) do usuário logado.
+- **Funcionalidade adicionada**: `GET /pulse-feedbacks/mine` — lista unificada (pendentes + finalizadas) com flag `editable` (`true` enquanto `cycle.status === ABERTO`). Tela `/pulse` reescrita para mostrar essa listagem completa, agrupada por tipo, com status visível; wizard (`/pulse/[id]`) agora suporta reabrir e editar uma avaliação já finalizada enquanto o ciclo está aberto, e vira somente-leitura automaticamente depois que o admin encerra o ciclo (o backend já bloqueava a escrita nesse caso — faltava só a UI refletir isso).
+- **Confirmado como fora de escopo desta sprint**: visualização dos feedbacks recebidos de colegas/gestor com anonimato ("Colega 1/2/3") — depende do relatório consolidado, que é Sprint 4/5.
+
+**Monitoramento em tempo real do ciclo (pedido do Erick, pulled forward das Sprints 4/5):**
+- `GET /pulse-cycles/:id/progress` (ADMIN): percentual de conclusão por área + geral, do ciclo consultado. **Puramente informativo** — o sistema nunca bloqueia o encerramento do ciclo mesmo com áreas abaixo de 100% (decisão confirmada com Erick: ex. alguém de férias).
+- `GET /pulse-team/current` e `GET /pulse-team/:cycleId` (GESTOR): percentual de conclusão por pessoa, escopado à própria área. O gestor vê só o "quanto falta" de cada um, nunca o conteúdo das respostas.
+- Frontend: drawer "Ver Progresso" na tela de Ciclos Pulse (admin) com barra por área; tela "Avaliação do Time" (`/pulse/time`, gestor) com barra por pessoa — essa rota já estava linkada no menu desde a Sprint 1, mas sem página até agora.
+
 **Sprint 4 — Consolidação do Gestor + IA**
 - Tela "Avaliação do Time" (tela 4) + consolidação.
 - Integração Anthropic API para geração de análise (pontos fortes/melhoria/tendências/parecer sugerido), com persistência e regeneração.

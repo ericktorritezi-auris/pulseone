@@ -62,9 +62,18 @@ export default function DashboardPage() {
 
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <p className="text-sm text-p-neutral mb-1">Pulse Atual</p>
-          <p className="text-lg font-semibold text-p-primary-dark">
-            {data?.pulseAtual ?? 'Nenhum ciclo aberto'}
-          </p>
+          {data?.pulseAtual ? (
+            <>
+              <p className="text-lg font-semibold text-p-primary-dark">{data.pulseAtual.label}</p>
+              <p className="text-xs text-p-neutral mt-1">
+                {data.pulseAtual.total - data.pulseAtual.pendentes} de {data.pulseAtual.total} avaliações concluídas
+                {data.pulseAtual.deadline &&
+                  ` • Prazo: ${new Date(data.pulseAtual.deadline).toLocaleDateString('pt-BR')}`}
+              </p>
+            </>
+          ) : (
+            <p className="text-lg font-semibold text-p-primary-dark">Nenhum ciclo aberto</p>
+          )}
         </div>
       </div>
 
