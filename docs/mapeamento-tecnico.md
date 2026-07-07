@@ -624,7 +624,7 @@ Regra de privacidade final:
 - **Cadastro de `COLABORADOR`**: `ADMIN` vê/edita qualquer um, de qualquer área; `GESTOR` vê/edita só os da própria área.
 
 Implementação:
-- `UsersService.findAll()`: quando quem lista é `ADMIN`, retorna `COLABORADOR` + `GESTOR` de todas as áreas (nunca outros `ADMIN`, nem o próprio — gerenciado à parte, em "Meu Perfil"). Quando é `GESTOR`, retorna só `COLABORADOR` da própria área.
+- `UsersService.findAll()`: quando quem lista é `ADMIN`, retorna `COLABORADOR` + `GESTOR` de todas as áreas **e também o próprio cadastro do admin** (nunca o de outro `ADMIN`, se existir mais de um). Quando é `GESTOR`, retorna `COLABORADOR` + o próprio cadastro de `GESTOR`, só da própria área.
 - `UsersService.assertCanAccessTarget()`: usado em `findOne`, `update` e `remove` — bloqueia acesso a registros `ADMIN` de terceiros sempre; bloqueia acesso a registros `GESTOR` a menos que o requisitante seja o próprio gestor ou um `ADMIN`; aplica escopo por área normalmente para alvos `COLABORADOR`.
 - **Consequência prática**: o `ADMIN` consegue resolver qualquer problema de cadastro de um gestor (trocar cargo, área, dados) diretamente pela tela de Pessoas. Só o próprio cadastro do administrador fica fora do alcance de qualquer edição por terceiros — inclusive de outro admin, se existir mais de um.
 

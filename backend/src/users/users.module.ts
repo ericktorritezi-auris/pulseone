@@ -133,13 +133,13 @@ class UsersService {
   }
 
   async findAll(requester: AuthUser) {
-    // ADMIN vê COLABORADOR + GESTOR (de todas as áreas) — mas nunca outros
-    // registros de ADMIN, nem o próprio (gerenciado à parte, em "Meu Perfil").
-    // GESTOR vê só COLABORADOR da própria área (nunca outros gestores).
+    // ADMIN: vê COLABORADOR + GESTOR de todas as áreas, e TAMBÉM o próprio
+    // cadastro (mas nunca o de outro ADMIN, se existir mais de um).
+    // GESTOR: vê COLABORADOR + o próprio cadastro de GESTOR, só da própria área.
     const where: any =
       requester.role === UserRole.ADMIN
-        ? { role: { in: [UserRole.COLABORADOR, UserRole.GESTOR] } }
-        : { role: UserRole.COLABORADOR, areaId: requester.areaId };
+        ? { OR: [{ role: { in: [UserRole.COLABORADOR, UserRole.GESTOR] } }, { id: requester.id }] }
+        : { areaId: requester.areaId, role: { in: [UserRole.COLABORADOR, UserRole.GESTOR] } };
 
     return this.prisma.user.findMany({
       where,
