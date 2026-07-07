@@ -9,7 +9,7 @@ type AuthUser = { id: string; role: UserRole; areaId: string };
 class DashboardService {
   constructor(private prisma: PrismaService) {}
 
-  async getCollaboratorDashboard(userId: string) {
+  async getCollaboratorDashboard(userId: string, role: UserRole) {
     const [ultimosRecebidos, ultimosEnviados, activeCycle] = await Promise.all([
       this.prisma.feedback.findMany({
         where: { receiverId: userId },
@@ -23,7 +23,11 @@ class DashboardService {
         orderBy: { createdAt: 'desc' },
         take: 3,
       }),
-      this.prisma.pulseCycle.findFirst({ where: { status: 'ABERTO' }, orderBy: { openedAt: 'desc' } }),
+      // Admin nunca avalia nem é avaliado — nem vale a pena consultar o
+      // ciclo ativo pra ele, o card de Pulse Atual não se aplica.
+      role === UserRole.ADMIN
+        ? null
+        : this.prisma.pulseCycle.findFirst({ where: { status: 'ABERTO' }, orderBy: { openedAt: 'desc' } }),
     ]);
 
     let pulseAtual: { label: string; deadline: Date | null; pendentes: number; total: number } | null = null;
@@ -72,7 +76,7 @@ class DashboardController {
 
   @Get('collaborator')
   getCollaborator(@Req() req: { user: AuthUser }) {
-    return this.dashboardService.getCollaboratorDashboard(req.user.id);
+    return this.dashboardService.getCollaboratorDashboard(req.user.id, req.user.role);
   }
 }
 

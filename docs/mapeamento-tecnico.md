@@ -587,6 +587,12 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 
 ⚠️ **Nota para o futuro:** essa é uma correção pontual pra este caso específico. Qualquer mudança futura de enum que remova um valor já em uso por dados existentes vai precisar de um fixup parecido, feito sob medida — não é algo que dá pra automatizar de forma genérica sem saber pra onde cada dado antigo deveria migrar.
 
+### 5.11 Dashboard do Admin — widgets irrelevantes escondidos (interino até a Sprint 5)
+
+**Achado do Erick:** o Admin via a mesma tela de dashboard do colaborador comum, incluindo "Meu Score Atual" e "Pulse Atual" — nenhum dos dois se aplica ao admin, já que ele nunca é avaliado (seção 5.7). Também apareceu uma notificação antiga de "ciclo aberto — avaliações pendentes" pro admin, mas isso era só resquício de um teste anterior à correção da seção 5.7 (novos ciclos não geram mais essa notificação pro admin).
+
+**Correção:** `dashboard/collaborator` não calcula mais `pulseAtual` quando quem pede é `ADMIN` (nem consulta o ciclo ativo à toa). No frontend, os cards "Meu Score Atual" e "Pulse Atual" ficam ocultos pro admin, mostrando só "Área" + a nota de que o Dashboard Executivo completo (participação, pendências, NPS médio, score médio por área) chega na Sprint 5. O bloco de Feedback Contínuo (recebidos/enviados) continua aparecendo pro admin normalmente — essa parte é livre pra qualquer pessoa da organização, admin incluído.
+
 **Sprint 4 — Consolidação do Gestor + IA**
 - Tela "Avaliação do Time" (tela 4) + consolidação.
 - Integração Anthropic API para geração de análise (pontos fortes/melhoria/tendências/parecer sugerido), com persistência e regeneração.

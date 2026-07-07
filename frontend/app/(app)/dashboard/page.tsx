@@ -22,6 +22,7 @@ export default function DashboardPage() {
   }, []);
 
   if (!user) return null;
+  const isAdmin = user.role === 'ADMIN';
 
   return (
     <div>
@@ -41,18 +42,20 @@ export default function DashboardPage() {
         {user.role === 'ADMIN' && 'Você tem acesso administrativo completo.'}
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white rounded-xl border border-slate-200 p-6 flex items-center gap-4">
-          <ScoreRing value={data?.score ?? 0} size={64} />
-          <div>
-            <p className="text-sm text-p-neutral">Meu Score Atual</p>
-            <p className="text-xs text-p-neutral mt-1">
-              {data?.score === null || data?.score === undefined
-                ? 'Disponível após o primeiro ciclo Pulse'
-                : ''}
-            </p>
+      <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-1' : 'md:grid-cols-3'} gap-4 mb-8`}>
+        {!isAdmin && (
+          <div className="bg-white rounded-xl border border-slate-200 p-6 flex items-center gap-4">
+            <ScoreRing value={data?.score ?? 0} size={64} />
+            <div>
+              <p className="text-sm text-p-neutral">Meu Score Atual</p>
+              <p className="text-xs text-p-neutral mt-1">
+                {data?.score === null || data?.score === undefined
+                  ? 'Disponível após o primeiro ciclo Pulse'
+                  : ''}
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <p className="text-sm text-p-neutral mb-1">Área</p>
@@ -60,21 +63,23 @@ export default function DashboardPage() {
           <p className="text-xs text-p-neutral mt-1">{user.positionName}</p>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <p className="text-sm text-p-neutral mb-1">Pulse Atual</p>
-          {data?.pulseAtual ? (
-            <>
-              <p className="text-lg font-semibold text-p-primary-dark">{data.pulseAtual.label}</p>
-              <p className="text-xs text-p-neutral mt-1">
-                {data.pulseAtual.total - data.pulseAtual.pendentes} de {data.pulseAtual.total} avaliações concluídas
-                {data.pulseAtual.deadline &&
-                  ` • Prazo: ${new Date(data.pulseAtual.deadline).toLocaleDateString('pt-BR')}`}
-              </p>
-            </>
-          ) : (
-            <p className="text-lg font-semibold text-p-primary-dark">Nenhum ciclo aberto</p>
-          )}
-        </div>
+        {!isAdmin && (
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <p className="text-sm text-p-neutral mb-1">Pulse Atual</p>
+            {data?.pulseAtual ? (
+              <>
+                <p className="text-lg font-semibold text-p-primary-dark">{data.pulseAtual.label}</p>
+                <p className="text-xs text-p-neutral mt-1">
+                  {data.pulseAtual.total - data.pulseAtual.pendentes} de {data.pulseAtual.total} avaliações concluídas
+                  {data.pulseAtual.deadline &&
+                    ` • Prazo: ${new Date(data.pulseAtual.deadline).toLocaleDateString('pt-BR')}`}
+                </p>
+              </>
+            ) : (
+              <p className="text-lg font-semibold text-p-primary-dark">Nenhum ciclo aberto</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -89,7 +94,9 @@ export default function DashboardPage() {
       </div>
 
       <p className="text-xs text-p-neutral mt-8">
-        Os widgets de score, NPS e evolução por ciclo chegam nas Sprints 3, 4 e 5.
+        {isAdmin
+          ? 'O Dashboard Executivo (participação, pendências, NPS médio e score médio por área) chega na Sprint 5.'
+          : 'Os widgets de score, NPS e evolução por ciclo chegam nas Sprints 3, 4 e 5.'}
       </p>
     </div>
   );
