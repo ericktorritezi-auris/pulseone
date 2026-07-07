@@ -84,7 +84,9 @@ Backend (NestJS) e frontend (Next.js) rodam **no mesmo serviço Railway**, dentr
 
 - O **Next.js** ocupa a porta pública (`PORT`, injetada pelo Railway) e faz *proxy* interno de `/api/*` para o backend.
 - O **NestJS** roda em uma porta interna fixa (`INTERNAL_API_PORT=3333`), nunca exposta diretamente.
-- `start.js`, na raiz do repositório, sobe os dois processos juntos.
+- `start.js`, na raiz do repositório, sobe os dois processos juntos e aplica o schema do banco (`prisma db push`) + seed automaticamente.
+
+**Domínio oficial:** `pulseone.belleplanner.com.br`
 
 **Configuração no Railway:**
 - Root Directory: raiz do repositório (não usar `backend` nem `frontend` isoladamente).
@@ -96,4 +98,4 @@ Deploy contínuo a partir da branch `main` via GitHub Actions.
 
 ---
 
-Versão 1.0.0 • Desenvolvido por Erick Torritese
+Versão 1.0.0 • Desenvolvido por BellePlanner

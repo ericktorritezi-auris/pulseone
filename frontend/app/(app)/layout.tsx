@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../lib/auth-context';
 import { Sidebar } from '../../components/shared/Sidebar';
 import { Topbar } from '../../components/shared/Topbar';
+import { Footer } from '../../components/shared/Footer';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -30,6 +31,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0">
         <Topbar />
         <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+        <Footer />
       </div>
     </div>
   );

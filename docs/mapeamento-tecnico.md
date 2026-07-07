@@ -7,6 +7,7 @@
 - Sem fotos em nenhum lugar do sistema (inclusive PDF) — avatar sempre por iniciais.
 - IA: Anthropic API substitui OpenAI API em todas as menções do PRD.
 - PDF: Puppeteer (HTML→PDF) como solução principal. PDFKit apenas em uso pontual, se necessário.
+- **Domínio oficial**: `pulseone.belleplanner.com.br`. **Rodapé obrigatório (PRD seção 3)** passa de "Desenvolvido por Erick Torritese" para **"Desenvolvido por BellePlanner"** — consolidando o PulseOne no catálogo de produtos BellePlanner. Aplicado no sistema autenticado (`components/shared/Footer.tsx`); pendente aplicar também na Landing Page (Sprint 6) e no PDF final (Sprint 5) quando forem construídos.
 
 **Correções obrigatórias aplicadas na v1.1.0:**
 1. Autoavaliação passa a ser exibida apenas como referência informativa — **não entra no cálculo do score final**.
