@@ -615,6 +615,19 @@ Para cada Area com colaboradores ativos:
 
 No formulário de "Cadastrar Pessoa": quando quem está logado é `GESTOR`, o campo **Área** vem pré-preenchido com a própria área e **desabilitado** (`disabled`) — não é só uma sugestão de UX, é reforço visual de uma regra que o backend já impõe de qualquer forma. Quando é `ADMIN`, o campo continua livre.
 
+### 5.6 Auto-visibilidade de ADMIN / acesso total do ADMIN a GESTOR — **implementado nesta rodada**
+
+Regra de privacidade final:
+
+- **Cadastro de `ADMIN`**: só a própria pessoa pode ver/editar — ninguém mais, nem sequer outro admin.
+- **Cadastro de `GESTOR`**: só o próprio gestor **ou o `ADMIN`** podem ver/editar. Nenhum outro gestor, nem colaborador, tem acesso.
+- **Cadastro de `COLABORADOR`**: `ADMIN` vê/edita qualquer um, de qualquer área; `GESTOR` vê/edita só os da própria área.
+
+Implementação:
+- `UsersService.findAll()`: quando quem lista é `ADMIN`, retorna `COLABORADOR` + `GESTOR` de todas as áreas (nunca outros `ADMIN`, nem o próprio — gerenciado à parte, em "Meu Perfil"). Quando é `GESTOR`, retorna só `COLABORADOR` da própria área.
+- `UsersService.assertCanAccessTarget()`: usado em `findOne`, `update` e `remove` — bloqueia acesso a registros `ADMIN` de terceiros sempre; bloqueia acesso a registros `GESTOR` a menos que o requisitante seja o próprio gestor ou um `ADMIN`; aplica escopo por área normalmente para alvos `COLABORADOR`.
+- **Consequência prática**: o `ADMIN` consegue resolver qualquer problema de cadastro de um gestor (trocar cargo, área, dados) diretamente pela tela de Pessoas. Só o próprio cadastro do administrador fica fora do alcance de qualquer edição por terceiros — inclusive de outro admin, se existir mais de um.
+
 ---
 
 ## PRÓXIMO PASSO SUGERIDO

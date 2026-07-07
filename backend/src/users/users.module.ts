@@ -70,8 +70,6 @@ class UsersService {
    * - ADMIN: só existe se quem está criando já é ADMIN e marcou asAdmin=true.
    * - GESTOR: automático quando o cargo (Position.isManager) é true.
    * - COLABORADOR: automático quando o cargo não é de gestão.
-   * Isso elimina a possibilidade de inconsistência entre "cargo de gestor"
-   * e o papel de acesso da pessoa no sistema.
    */
   private async resolveRole(positionId: string, creator: AuthUser, asAdmin?: boolean): Promise<UserRole> {
     if (asAdmin) {
@@ -101,8 +99,48 @@ class UsersService {
     return dtoAreaId;
   }
 
+  /**
+   * REGRA DE NEGÓCIO — AUTO-VISIBILIDADE:
+   * - Cadastro de ADMIN: só a própria pessoa pode ver/editar — ninguém mais,
+   *   nem sequer outro admin.
+   * - Cadastro de GESTOR: só o próprio gestor OU o ADMIN podem ver/editar.
+   *   Nenhum outro gestor, nem colaborador, tem acesso.
+   * - Cadastro de COLABORADOR: ADMIN vê/edita qualquer um; GESTOR vê/edita
+   *   só os da própria área.
+   */
+  private assertCanAccessTarget(target: { id: string; role: UserRole; areaId: string }, requester: AuthUser) {
+    const isSelf = target.id === requester.id;
+
+    if (target.role === UserRole.ADMIN) {
+      if (!isSelf) {
+        throw new ForbiddenException('O cadastro do administrador só pode ser acessado por ele mesmo.');
+      }
+      return;
+    }
+
+    if (target.role === UserRole.GESTOR) {
+      if (!isSelf && requester.role !== UserRole.ADMIN) {
+        throw new ForbiddenException('Este cadastro só pode ser acessado pelo próprio gestor ou pelo administrador.');
+      }
+      return;
+    }
+
+    // Target é COLABORADOR
+    if (requester.role === UserRole.GESTOR && target.areaId !== requester.areaId) {
+      throw new ForbiddenException('Você só pode acessar pessoas da sua própria área.');
+    }
+    // ADMIN acessa qualquer COLABORADOR livremente.
+  }
+
   async findAll(requester: AuthUser) {
-    const where = requester.role === UserRole.GESTOR ? { areaId: requester.areaId } : {};
+    // ADMIN vê COLABORADOR + GESTOR (de todas as áreas) — mas nunca outros
+    // registros de ADMIN, nem o próprio (gerenciado à parte, em "Meu Perfil").
+    // GESTOR vê só COLABORADOR da própria área (nunca outros gestores).
+    const where: any =
+      requester.role === UserRole.ADMIN
+        ? { role: { in: [UserRole.COLABORADOR, UserRole.GESTOR] } }
+        : { role: UserRole.COLABORADOR, areaId: requester.areaId };
+
     return this.prisma.user.findMany({
       where,
       include: { area: true, position: true },
@@ -118,9 +156,7 @@ class UsersService {
 
     if (!user) throw new NotFoundException('Usuário não encontrado.');
 
-    if (requester.role === UserRole.GESTOR && user.areaId !== requester.areaId) {
-      throw new ForbiddenException('Você só pode visualizar pessoas da sua própria área.');
-    }
+    this.assertCanAccessTarget(user, requester);
 
     return user;
   }
@@ -146,10 +182,9 @@ class UsersService {
   async update(id: string, dto: UpdateUserDto, requester: AuthUser) {
     const target = await this.prisma.user.findUniqueOrThrow({ where: { id } });
 
+    this.assertCanAccessTarget(target, requester);
+
     if (requester.role === UserRole.GESTOR) {
-      if (target.areaId !== requester.areaId) {
-        throw new ForbiddenException('Você só pode editar pessoas da sua própria área.');
-      }
       // Gestor nunca move alguém para outra área nem promove a admin por aqui.
       delete dto.areaId;
     }
@@ -166,9 +201,7 @@ class UsersService {
   async remove(id: string, requester: AuthUser) {
     const target = await this.prisma.user.findUniqueOrThrow({ where: { id } });
 
-    if (requester.role === UserRole.GESTOR && target.areaId !== requester.areaId) {
-      throw new ForbiddenException('Você só pode inativar pessoas da sua própria área.');
-    }
+    this.assertCanAccessTarget(target, requester);
 
     // Soft delete — mantém histórico de feedbacks/pulses íntegro
     return this.prisma.user.update({ where: { id }, data: { active: false } });
