@@ -561,6 +561,24 @@ RESEND_FROM_EMAIL=                      # ex: naoresponda@pulseone.app.br
 
 **Organização por ciclo:** `GET /pulse-feedbacks/mine` agora retorna `cycleId` em cada item. A tela `/pulse` passou a: mostrar só o ciclo `ABERTO` solto na tela (agrupado por tipo, como antes); qualquer ciclo que já não está mais `ABERTO` vira uma "pastinha" clicável em "Ciclos anteriores", levando pra `/pulse/ciclo/[cycleId]` (somente consulta). Extraído um componente `PulseItemsByType` compartilhado entre a tela principal e a pastinha de histórico, pra não duplicar a renderização.
 
+### 5.9 Separação de labels do fluxo de avaliação (pedido do Erick — fecha o desenho definitivo)
+
+O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções) foi **separado em dois tipos distintos**, porque cada direção é uma tarefa conceitualmente diferente pra quem avalia:
+
+- `AVALIACAO_EQUIPE` — "Avaliação da Equipe": o gestor avalia um liderado direto (descendente). Só existe pra quem tem liderados.
+- `AVALIACAO_GESTOR` — "Avaliação do Gestor Direto": qualquer pessoa avalia o próprio gestor direto (ascendente). Só existe pra quem tem um `managerId` preenchido.
+
+**Fluxo final, por perfil:**
+
+| Colaborador (sem função de gestão) | Gestor Direto (com função de gestão) |
+|---|---|
+| Autoavaliação | Autoavaliação |
+| Avaliação de Colegas (mesmo gestor direto) | Avaliação da Equipe (liderados diretos) |
+| Avaliação do Gestor Direto (se houver) | Avaliação de Colegas (outros gestores com o mesmo gestor direto — confirmado que continua restrito ao mesmo time imediato, não toda a área) |
+| | Avaliação do Gestor Direto (se houver) |
+
+**Scoring inalterado:** `PulseScoreService` soma `AVALIACAO_EQUIPE` e `AVALIACAO_GESTOR` no mesmo balde de `managerScore` de quem está sendo avaliado — é o "score recebido na linha hierárquica direta", venha de cima (chefe) ou de baixo (liderado). A fórmula `finalScore = teamScore*0.6 + managerScore*0.4` não mudou.
+
 **Sprint 4 — Consolidação do Gestor + IA**
 - Tela "Avaliação do Time" (tela 4) + consolidação.
 - Integração Anthropic API para geração de análise (pontos fortes/melhoria/tendências/parecer sugerido), com persistência e regeneração.

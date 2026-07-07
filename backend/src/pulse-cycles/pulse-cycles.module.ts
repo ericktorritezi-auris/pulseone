@@ -77,13 +77,12 @@ class PulseAssignmentService {
         reportsToCreate.push({ cycleId, ownerId: member.id });
       }
 
-      // Avaliação do Gestor — MÃO DUPLA: o gestor avalia cada liderado direto
-      // (managerId aponta pra ele) E cada liderado também avalia o próprio
-      // gestor direto de volta. O cálculo de score (PulseScoreService) já
-      // agrupa por targetId, então cada direção alimenta o score da pessoa
-      // certa automaticamente: a avaliação do gestor sobre o liderado conta
-      // pro managerScore do liderado; a avaliação do liderado sobre o gestor
-      // conta pro managerScore do próprio gestor (vindo de quem reporta a ele).
+      // Avaliação hierárquica em mão dupla, agora com tipos distintos e
+      // labels próprios (pedido do Erick): o gestor avalia cada liderado
+      // direto (AVALIACAO_EQUIPE — "Avaliação da Equipe") e cada liderado
+      // avalia de volta o próprio gestor direto (AVALIACAO_GESTOR —
+      // "Avaliação do Gestor Direto"). O PulseScoreService soma as duas no
+      // mesmo balde de managerScore de quem é avaliado.
       for (const member of members) {
         if (!member.managerId) continue;
         const manager = members.find((m) => m.id === member.managerId);
@@ -93,13 +92,13 @@ class PulseAssignmentService {
           cycleId,
           evaluatorId: manager.id,
           targetId: member.id,
-          type: PulseEvaluationType.GESTOR,
+          type: PulseEvaluationType.AVALIACAO_EQUIPE,
         });
         feedbacksToCreate.push({
           cycleId,
           evaluatorId: member.id,
           targetId: manager.id,
-          type: PulseEvaluationType.GESTOR,
+          type: PulseEvaluationType.AVALIACAO_GESTOR,
         });
       }
 
@@ -227,7 +226,11 @@ class PulseScoreService {
         if (fb.type === PulseEvaluationType.COLEGA) {
           colegaScores.push(behaviorScore);
           if (npsValue !== null) npsValues.push(npsValue);
-        } else if (fb.type === PulseEvaluationType.GESTOR) {
+        } else if (fb.type === PulseEvaluationType.AVALIACAO_EQUIPE || fb.type === PulseEvaluationType.AVALIACAO_GESTOR) {
+          // As duas pontas da avaliação hierárquica (gestor→liderado e
+          // liderado→gestor) contam pro mesmo balde de managerScore de
+          // quem está sendo avaliado — é o "score recebido na linha
+          // hierárquica direta", venha ela de cima ou de baixo.
           gestorScores.push(behaviorScore);
           if (npsValue !== null) npsValues.push(npsValue);
         } else if (fb.type === PulseEvaluationType.AUTOAVALIACAO) {

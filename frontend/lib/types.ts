@@ -84,7 +84,7 @@ export interface PulseCycle {
 export interface PendingPulseFeedback {
   id: string;
   cycleId: string;
-  type: 'AUTOAVALIACAO' | 'GESTOR' | 'COLEGA';
+  type: 'AUTOAVALIACAO' | 'AVALIACAO_EQUIPE' | 'AVALIACAO_GESTOR' | 'COLEGA';
   status: string;
   target: { fullName: string };
   cycle: { label: string; status: string };

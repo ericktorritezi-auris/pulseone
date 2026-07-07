@@ -28,7 +28,8 @@ enum PulseCycleStatus {
 
 enum PulseEvaluationType {
   AUTOAVALIACAO
-  GESTOR
+  AVALIACAO_EQUIPE // gestor avalia um liderado direto (descendente)
+  AVALIACAO_GESTOR // qualquer pessoa avalia o próprio gestor direto (ascendente)
   COLEGA
 }
 

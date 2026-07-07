@@ -8,8 +8,9 @@ import { PendingPulseFeedback } from '../../../../../lib/types';
 import { AvatarInitials } from '../../../../../components/shared/AvatarInitials';
 
 const TYPE_TITLES: Record<string, string> = {
-  COLEGA: 'Avaliação dos Colegas',
-  GESTOR: 'Avaliação do Gestor',
+  COLEGA: 'Avaliação de Colegas',
+  AVALIACAO_EQUIPE: 'Avaliação da Equipe',
+  AVALIACAO_GESTOR: 'Avaliação do Gestor Direto',
   AUTOAVALIACAO: 'Minha Autoavaliação',
 };
 

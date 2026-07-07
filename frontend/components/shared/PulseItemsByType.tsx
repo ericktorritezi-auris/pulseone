@@ -1,15 +1,16 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { ChevronRight, ClipboardCheck, User, Users } from 'lucide-react';
+import { ChevronRight, ClipboardCheck, User, Users, UserCheck } from 'lucide-react';
 import { PendingPulseFeedback } from '../../lib/types';
 import { AvatarInitials } from './AvatarInitials';
 import { StatusBadge } from './StatusBadge';
 
 const TYPE_LABELS: Record<string, { title: string; icon: typeof User }> = {
   AUTOAVALIACAO: { title: 'Minha Autoavaliação', icon: User },
-  GESTOR: { title: 'Avaliação do Gestor', icon: ClipboardCheck },
-  COLEGA: { title: 'Avaliação dos Colegas', icon: Users },
+  AVALIACAO_EQUIPE: { title: 'Avaliação da Equipe', icon: Users },
+  AVALIACAO_GESTOR: { title: 'Avaliação do Gestor Direto', icon: UserCheck },
+  COLEGA: { title: 'Avaliação de Colegas', icon: ClipboardCheck },
 };
 
 export function PulseItemsByType({ items }: { items: PendingPulseFeedback[] }) {
