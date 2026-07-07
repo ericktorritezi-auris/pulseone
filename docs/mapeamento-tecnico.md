@@ -503,21 +503,23 @@ RESEND_FROM_EMAIL=                      # ex: naoresponda@pulseone.app.br
 
 ## 4. PLANO DE SPRINTS
 
-**Sprint 0 — Fundação (infra + autenticação)**
+**Sprint 0 — Fundação (infra + autenticação) ✅ concluída**
 - Setup do monorepo (Next + Nest), Railway, GitHub Actions, Prisma init + migration inicial.
 - Design tokens Tailwind + shadcn instalado e configurado.
 - Auth completo: login, confirmação de e-mail, recuperação de senha (via `EmailVerificationToken`/`PasswordResetToken`, com TTL configurável), troca obrigatória no 1º login do admin.
 - Seed: admin (`admin` / `Acesso@123`, `mustChangePwd=true`), 5 perguntas oficiais, áreas/cargos de exemplo (com ao menos um cargo `isManager=true` por área para validar a resolução dinâmica de gestor).
 
-**Sprint 1 — Cadastros + Estrutura organizacional**
+**Sprint 1 — Cadastros + Estrutura organizacional ✅ concluída**
 - CRUD Pessoas, Áreas, Cargos (telas 2 e 3 da demo).
 - Sidebar + navegação por role (menus da seção 12 do PRD).
 - AvatarInitials, ScoreRing, StatusBadge, ProgressBar (componentes-base do design system).
+- Isolamento por área no cadastro (seção 5) + auto-visibilidade de ADMIN/GESTOR (seção 5.6).
 
-**Sprint 2 — Feedback Contínuo + Notificações**
-- Envio de feedback a qualquer momento (destinatário, texto, NPS).
-- Sistema de notificações (banner "Pulse aberto", sino no topbar).
-- Dashboard do Colaborador (tela 1) com dados reais.
+**Sprint 2 — Feedback Contínuo + Notificações ✅ concluída**
+- Envio de feedback a qualquer momento (destinatário, texto, NPS) — **livre entre qualquer pessoa ativa da organização, sem trava de área** (diferente do Feedback Pulse, que é fechado por área — seção 5.1). Decisão confirmada com Erick.
+- Sistema de notificações real: `NotificationsModule` (listar + marcar como lida) + disparo automático de notificação a cada feedback recebido (PRD seção 26). Sino funcional no Topbar com contador de não lidas.
+- `GET /dashboard/collaborator` com dados reais de últimos feedbacks recebidos/enviados. Score, NPS de recomendação e evolução por ciclo continuam retornando `null`/vazio de forma explícita até o motor do Pulse (Sprint 3-5).
+- Endpoint auxiliar `GET /feedbacks/recipients`, aberto a qualquer usuário autenticado (diferente de `/users`, restrito a ADMIN/GESTOR) — necessário porque o Feedback Contínuo é livre.
 
 **Sprint 3 — Ciclo Pulse (core do produto)**
 - Lifecycle do ciclo (RASCUNHO → ABERTO → ENCERRADO → EM_CONSOLIDAÇÃO → FINALIZADO → ARQUIVADO).

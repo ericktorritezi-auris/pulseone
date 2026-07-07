@@ -4,8 +4,20 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { AreasModule } from './areas/areas.module';
 import { PositionsModule } from './positions/positions.module';
+import { FeedbacksModule } from './feedbacks/feedbacks.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, UsersModule, AreasModule, PositionsModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    UsersModule,
+    AreasModule,
+    PositionsModule,
+    FeedbacksModule,
+    NotificationsModule,
+    DashboardModule,
+  ],
 })
 export class AppModule {}

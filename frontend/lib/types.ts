@@ -39,3 +39,28 @@ export interface Person {
   positionId: string;
   position: Position;
 }
+
+export interface Feedback {
+  id: string;
+  texto: string;
+  criadoEm: string;
+  remetente?: string;
+  destinatario?: string;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface CollaboratorDashboard {
+  score: number | null;
+  scoreEvolution: { ciclo: string; score: number }[];
+  npsRecomendacao: number | null;
+  pulseAtual: string | null;
+  ultimosRecebidos: Feedback[];
+  ultimosEnviados: Feedback[];
+}
