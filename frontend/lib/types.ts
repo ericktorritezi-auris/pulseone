@@ -27,6 +27,11 @@ export interface Position {
   isManager: boolean;
 }
 
+export interface ManagerOption {
+  id: string;
+  fullName: string;
+}
+
 export interface Person {
   id: string;
   fullName: string;
@@ -38,6 +43,8 @@ export interface Person {
   area: Area;
   positionId: string;
   position: Position;
+  managerId: string | null;
+  manager: ManagerOption | null;
 }
 
 export interface Feedback {

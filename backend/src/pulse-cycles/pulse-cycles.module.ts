@@ -30,12 +30,19 @@ class OpenCycleDto {
 }
 
 /**
- * REGRA DE NEGÓCIO — Feedback Pulse fechado por área (seção 5.1 do
- * mapeamento técnico). Gera automaticamente, para um ciclo recém-aberto:
- * - Autoavaliação: sempre, individual.
- * - Avaliação do Gestor: o gestor da área avalia cada membro (menos ele mesmo).
- * - Avaliação de Colegas: todos-contra-todos, SOMENTE dentro da mesma área.
- *   Área com 1 pessoa só não gera avaliação de colega (não há com quem comparar).
+ * REGRA DE NEGÓCIO — Feedback Pulse fechado por área E por hierarquia direta
+ * (seção 5.1 + 5.7 do mapeamento técnico). Gera automaticamente, para um
+ * ciclo recém-aberto:
+ * - Autoavaliação: sempre, individual, pra todo mundo (exceto ADMIN).
+ * - Avaliação do Gestor: cada pessoa é avaliada pelo seu `managerId` direto,
+ *   se houver um. Um gestor NUNCA avalia quem não é seu liderado direto —
+ *   mesmo estando na mesma área (ex: um Diretor não avalia os liderados do
+ *   Gerente abaixo dele, só o próprio Gerente).
+ * - Avaliação de Colegas: todos-contra-todos, mas SOMENTE entre pessoas que
+ *   compartilham o mesmo `managerId` (mesmo time imediato) — não a área
+ *   inteira. Quem não tem ninguém com o mesmo gestor direto não recebe
+ *   avaliação de colega nenhuma (ex: um gestor sozinho no topo, sem pares).
+ * ADMIN nunca avalia nem é avaliado — filtrado direto na consulta.
  * Também cria o PulseReport (status inicial EM_ANDAMENTO) de cada colaborador.
  */
 @Injectable()
@@ -44,7 +51,7 @@ class PulseAssignmentService {
 
   async generateForCycle(cycleId: string) {
     const areas = await this.prisma.area.findMany({
-      include: { users: { where: { active: true } } },
+      include: { users: { where: { active: true, role: { not: UserRole.ADMIN } } } },
     });
 
     const feedbacksToCreate: {
@@ -59,37 +66,46 @@ class PulseAssignmentService {
       const members = area.users;
       if (members.length === 0) continue;
 
-      const gestor = members.find((m) => m.role === UserRole.GESTOR);
-
+      // Autoavaliação — sempre, individual (informativa, não pondera o score final)
       for (const member of members) {
-        // Autoavaliação — sempre, individual (informativa, não pondera o score final)
         feedbacksToCreate.push({
           cycleId,
           evaluatorId: member.id,
           targetId: member.id,
           type: PulseEvaluationType.AUTOAVALIACAO,
         });
-
         reportsToCreate.push({ cycleId, ownerId: member.id });
       }
 
-      // Avaliação do Gestor — o gestor avalia cada membro, exceto ele mesmo
-      if (gestor) {
-        for (const member of members) {
-          if (member.id === gestor.id) continue;
-          feedbacksToCreate.push({
-            cycleId,
-            evaluatorId: gestor.id,
-            targetId: member.id,
-            type: PulseEvaluationType.GESTOR,
-          });
-        }
+      // Avaliação do Gestor — cada pessoa é avaliada pelo seu managerId direto.
+      // Um gestor só avalia quem tem managerId apontando pra ele, nunca a área toda.
+      for (const member of members) {
+        if (!member.managerId) continue;
+        const manager = members.find((m) => m.id === member.managerId);
+        if (!manager) continue; // gestor direto fora desta área/inativo — não gera
+
+        feedbacksToCreate.push({
+          cycleId,
+          evaluatorId: manager.id,
+          targetId: member.id,
+          type: PulseEvaluationType.GESTOR,
+        });
       }
 
-      // Avaliação de Colegas — todos-contra-todos, só dentro da mesma área
-      if (members.length >= 2) {
-        for (const evaluator of members) {
-          for (const target of members) {
+      // Avaliação de Colegas — todos-contra-todos, só dentro do MESMO TIME
+      // IMEDIATO (mesmo managerId), não a área inteira.
+      const teams = new Map<string, typeof members>();
+      for (const member of members) {
+        const key = member.managerId ?? `__sem-gestor-${member.id}`; // sem gestor = time só dele, não forma par
+        const group = teams.get(key) ?? [];
+        group.push(member);
+        teams.set(key, group);
+      }
+
+      for (const team of teams.values()) {
+        if (team.length < 2) continue;
+        for (const evaluator of team) {
+          for (const target of team) {
             if (evaluator.id === target.id) continue;
             feedbacksToCreate.push({
               cycleId,
@@ -325,7 +341,7 @@ class PulseCyclesService {
     await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id: cycleId } });
 
     const areas = await this.prisma.area.findMany({
-      include: { users: { where: { active: true }, select: { id: true } } },
+      include: { users: { where: { active: true, role: { not: UserRole.ADMIN } }, select: { id: true } } },
     });
 
     const result: { areaId: string; areaName: string; total: number; finalizados: number; percentual: number }[] = [];

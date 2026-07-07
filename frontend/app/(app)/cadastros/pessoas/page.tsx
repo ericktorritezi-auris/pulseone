@@ -4,7 +4,7 @@ import { useEffect, useState, FormEvent } from 'react';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { api } from '../../../../lib/api';
 import { useAuth } from '../../../../lib/auth-context';
-import { Area, Person, Position } from '../../../../lib/types';
+import { Area, ManagerOption, Person, Position } from '../../../../lib/types';
 import { Drawer } from '../../../../components/shared/Drawer';
 import { AvatarInitials } from '../../../../components/shared/AvatarInitials';
 import { StatusBadge } from '../../../../components/shared/StatusBadge';
@@ -15,6 +15,7 @@ const emptyForm = {
   phone: '',
   areaId: '',
   positionId: '',
+  managerId: '',
   password: '',
 };
 
@@ -23,6 +24,7 @@ export default function PessoasPage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [managers, setManagers] = useState<ManagerOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -33,6 +35,7 @@ export default function PessoasPage() {
   // REGRA (seção 5.3/5.5 do mapeamento técnico): gestor só cadastra na
   // própria área. O campo vem travado e pré-preenchido; admin escolhe livremente.
   const isGestor = user?.role === 'GESTOR';
+  const effectiveAreaId = isGestor ? user!.areaId : form.areaId;
 
   async function loadData() {
     setLoading(true);
@@ -56,6 +59,19 @@ export default function PessoasPage() {
     loadData();
   }, []);
 
+  // Recarrega a lista de possíveis gestores diretos sempre que a área
+  // efetiva (do form ou fixa do gestor) muda — o gestor direto precisa
+  // estar SEMPRE na mesma área da pessoa sendo cadastrada/editada.
+  useEffect(() => {
+    if (!drawerOpen || !effectiveAreaId) {
+      setManagers([]);
+      return;
+    }
+    const query = new URLSearchParams({ areaId: effectiveAreaId });
+    if (editingId) query.set('excludeUserId', editingId);
+    api.get<ManagerOption[]>(`/users/managers?${query.toString()}`).then(setManagers).catch(() => setManagers([]));
+  }, [drawerOpen, effectiveAreaId, editingId]);
+
   function openCreate() {
     setEditingId(null);
     setForm({ ...emptyForm, areaId: isGestor ? user!.areaId : '' });
@@ -71,6 +87,7 @@ export default function PessoasPage() {
       phone: person.phone,
       areaId: person.areaId,
       positionId: person.positionId,
+      managerId: person.managerId ?? '',
       password: '',
     });
     setError('');
@@ -88,6 +105,7 @@ export default function PessoasPage() {
           email: form.email,
           phone: form.phone,
           positionId: form.positionId,
+          managerId: form.managerId || null,
           ...(isGestor ? {} : { areaId: form.areaId }),
         });
       } else {
@@ -96,6 +114,7 @@ export default function PessoasPage() {
           email: form.email,
           phone: form.phone,
           positionId: form.positionId,
+          managerId: form.managerId || undefined,
           password: form.password,
           // Se for gestor, o backend ignora isso de qualquer forma e usa a
           // própria área — mandamos mesmo assim por clareza no payload.
@@ -142,6 +161,7 @@ export default function PessoasPage() {
               <th className="text-left px-4 py-3">Nome</th>
               <th className="text-left px-4 py-3">Área</th>
               <th className="text-left px-4 py-3">Cargo</th>
+              <th className="text-left px-4 py-3">Gestor Direto</th>
               <th className="text-left px-4 py-3">Status</th>
               <th className="text-right px-4 py-3">Ações</th>
             </tr>
@@ -149,14 +169,14 @@ export default function PessoasPage() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={5} className="text-center py-8 text-p-neutral">
+                <td colSpan={6} className="text-center py-8 text-p-neutral">
                   Carregando...
                 </td>
               </tr>
             )}
             {!loading && people.length === 0 && (
               <tr>
-                <td colSpan={5} className="text-center py-8 text-p-neutral">
+                <td colSpan={6} className="text-center py-8 text-p-neutral">
                   Nenhuma pessoa cadastrada ainda.
                 </td>
               </tr>
@@ -174,6 +194,7 @@ export default function PessoasPage() {
                 </td>
                 <td className="px-4 py-3 text-p-neutral">{person.area.name}</td>
                 <td className="px-4 py-3 text-p-neutral">{person.position.name}</td>
+                <td className="px-4 py-3 text-p-neutral">{person.manager?.fullName ?? '—'}</td>
                 <td className="px-4 py-3">
                   <StatusBadge status={person.active ? 'ATIVO' : 'INATIVO'} />
                 </td>
@@ -239,7 +260,7 @@ export default function PessoasPage() {
               required
               disabled={isGestor}
               value={isGestor ? user!.areaId : form.areaId}
-              onChange={(e) => setForm({ ...form, areaId: e.target.value })}
+              onChange={(e) => setForm({ ...form, areaId: e.target.value, managerId: '' })}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-100 disabled:text-p-neutral"
             >
               <option value="">Selecione...</option>
@@ -268,6 +289,27 @@ export default function PessoasPage() {
             </select>
             <p className="text-xs text-p-neutral mt-1">
               O perfil de acesso (gestor/colaborador) é definido automaticamente pelo cargo escolhido.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-p-primary-dark mb-1">Gestor Direto</label>
+            <select
+              value={form.managerId}
+              onChange={(e) => setForm({ ...form, managerId: e.target.value })}
+              disabled={!effectiveAreaId}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-100"
+            >
+              <option value="">Nenhum (topo da hierarquia)</option>
+              {managers.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.fullName}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-p-neutral mt-1">
+              Quem avalia esta pessoa no ciclo Pulse e com quem ela forma o mesmo time imediato pra
+              avaliação de colegas. Deixe em branco se não houver ninguém acima dentro do sistema.
             </p>
           </div>
 

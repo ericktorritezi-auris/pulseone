@@ -74,8 +74,13 @@ model User {
   area          Area       @relation(fields: [areaId], references: [id])
   positionId    String
   position      Position   @relation(fields: [positionId], references: [id])
-  // Gestor é sempre derivado em runtime: usuário ativo com Position.isManager = true
-  // na mesma areaId. Não existe FK manual de gestor (ver PulseTeamService).
+  // Gestor direto explícito (hierarquia dentro da área): quem avalia esta
+  // pessoa no tipo GESTOR, e com quem ela forma "mesmo time imediato" pra
+  // fins de avaliação de colegas. Opcional — null = topo da hierarquia
+  // (ninguém acima dentro do sistema).
+  managerId     String?
+  manager       User?      @relation("DirectReports", fields: [managerId], references: [id])
+  directReports User[]     @relation("DirectReports")
   active        Boolean    @default(true)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt

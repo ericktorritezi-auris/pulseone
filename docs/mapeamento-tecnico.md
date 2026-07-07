@@ -540,6 +540,21 @@ RESEND_FROM_EMAIL=                      # ex: naoresponda@pulseone.app.br
 - `GET /pulse-team/current` e `GET /pulse-team/:cycleId` (GESTOR): percentual de conclusão por pessoa, escopado à própria área. O gestor vê só o "quanto falta" de cada um, nunca o conteúdo das respostas.
 - Frontend: drawer "Ver Progresso" na tela de Ciclos Pulse (admin) com barra por área; tela "Avaliação do Time" (`/pulse/time`, gestor) com barra por pessoa — essa rota já estava linkada no menu desde a Sprint 1, mas sem página até agora.
 
+### 5.7 Hierarquia de gestores diretos (pedido do Erick — substitui o modelo "um gestor por área")
+
+**Problema identificado:** o modelo original (Sprint 1) resolvia hierarquia só por `Area + Position.isManager` — um único gestor avaliando toda a área. Isso não suporta múltiplos níveis (ex: Diretor → Gerente → Colaboradores), onde cada gestor deve avaliar **só os liderados diretos**, não a área inteira.
+
+**Solução implementada:**
+- `User.managerId` (nullable, auto-relacionamento `manager`/`directReports`) volta ao schema — é o gestor direto explícito de cada pessoa. `null` = topo da hierarquia dentro do sistema.
+- **Validação no cadastro/edição** (`UsersService.resolveManagerId`): o gestor indicado precisa existir, estar ativo, ter `role=GESTOR` e ser da **mesma área** (a avaliação continua fechada por área); ninguém pode ser gestor de si mesmo; bloqueado o ciclo mais simples (A gestor de B e B gestor de A).
+- **Admin nunca avalia nem é avaliado** (correção de bug confirmada): filtrado direto na consulta (`role: { not: ADMIN }`) em `PulseAssignmentService`, `getProgressByArea` e `PulseTeamService`.
+- **`PulseAssignmentService.generateForCycle` reescrito:**
+  - Autoavaliação: todo mundo (exceto admin), como antes.
+  - **Avaliação do Gestor:** cada pessoa é avaliada só por quem está no seu `managerId` — não mais "o gestor da área avalia todo mundo".
+  - **Avaliação de Colegas:** todos-contra-todos, mas só entre quem compartilha o **mesmo `managerId`** (mesmo time imediato) — decisão confirmada com Erick. Quem não tem ninguém com o mesmo gestor direto (ex: um gestor sozinho no topo) não recebe avaliação de colega nenhuma.
+- **Endpoint novo:** `GET /users/managers?areaId=X&excludeUserId=Y` — lista de possíveis gestores diretos (role=GESTOR, ativos, mesma área) pro dropdown do formulário.
+- **Frontend:** campo "Gestor Direto" no formulário de Cadastro de Pessoas, recarregado dinamicamente conforme a área selecionada; coluna "Gestor Direto" adicionada à tabela de Pessoas.
+
 **Sprint 4 — Consolidação do Gestor + IA**
 - Tela "Avaliação do Time" (tela 4) + consolidação.
 - Integração Anthropic API para geração de análise (pontos fortes/melhoria/tendências/parecer sugerido), com persistência e regeneração.

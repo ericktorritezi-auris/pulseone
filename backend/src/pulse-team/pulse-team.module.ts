@@ -35,7 +35,7 @@ class PulseTeamService {
 
   private async computeProgress(cycleId: string, requester: AuthUser) {
     const members = await this.prisma.user.findMany({
-      where: { areaId: requester.areaId, active: true },
+      where: { areaId: requester.areaId, active: true, role: { not: UserRole.ADMIN } },
       select: { id: true, fullName: true, role: true },
       orderBy: { fullName: 'asc' },
     });

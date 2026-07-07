@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
   Injectable,
@@ -47,6 +48,12 @@ class CreateUserDto {
   @IsBoolean()
   asAdmin?: boolean;
 
+  // Gestor direto (hierarquia — seção 5.7). Opcional: null/ausente = topo
+  // da hierarquia, ninguém acima dentro do sistema.
+  @IsOptional()
+  @IsString()
+  managerId?: string;
+
   @IsString()
   @MinLength(8)
   password: string;
@@ -58,6 +65,7 @@ class UpdateUserDto {
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsString() areaId?: string;
   @IsOptional() @IsString() positionId?: string;
+  @IsOptional() @IsString() managerId?: string | null;
 }
 
 @Injectable()
@@ -65,7 +73,7 @@ class UsersService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * REGRA DE NEGÓCIO CENTRAL (fonte única de verdade para hierarquia):
+   * REGRA DE NEGÓCIO CENTRAL (fonte única de verdade para hierarquia de acesso):
    * o "role" de um usuário nunca é escolhido livremente no formulário.
    * - ADMIN: só existe se quem está criando já é ADMIN e marcou asAdmin=true.
    * - GESTOR: automático quando o cargo (Position.isManager) é true.
@@ -97,6 +105,40 @@ class UsersService {
       throw new ForbiddenException('Área é obrigatória para cadastro feito pelo administrador.');
     }
     return dtoAreaId;
+  }
+
+  /**
+   * REGRA DE NEGÓCIO — HIERARQUIA (seção 5.7 do mapeamento técnico):
+   * managerId é o gestor direto explícito. Validações:
+   * - o gestor indicado precisa existir, estar ativo, ter role=GESTOR e
+   *   estar na MESMA área da pessoa sendo cadastrada/editada (a avaliação
+   *   é fechada por área — um gestor direto de outra área quebraria isso);
+   * - ninguém pode ser gestor direto de si mesmo;
+   * - bloqueia o ciclo mais simples (A é gestor de B e B é gestor de A).
+   */
+  private async resolveManagerId(
+    managerId: string | undefined | null,
+    areaId: string,
+    selfId?: string,
+  ): Promise<string | null> {
+    if (!managerId) return null;
+
+    if (managerId === selfId) {
+      throw new ForbiddenException('Uma pessoa não pode ser gestora direta de si mesma.');
+    }
+
+    const manager = await this.prisma.user.findUnique({ where: { id: managerId } });
+    if (!manager || !manager.active || manager.role !== UserRole.GESTOR) {
+      throw new ForbiddenException('O gestor direto indicado precisa ser uma pessoa ativa com cargo de gestão.');
+    }
+    if (manager.areaId !== areaId) {
+      throw new ForbiddenException('O gestor direto precisa ser da mesma área.');
+    }
+    if (selfId && manager.managerId === selfId) {
+      throw new ForbiddenException('Isso criaria um ciclo de hierarquia (vocês seriam gestores um do outro).');
+    }
+
+    return managerId;
   }
 
   /**
@@ -143,7 +185,7 @@ class UsersService {
 
     return this.prisma.user.findMany({
       where,
-      include: { area: true, position: true },
+      include: { area: true, position: true, manager: { select: { id: true, fullName: true } } },
       orderBy: { fullName: 'asc' },
     });
   }
@@ -151,7 +193,7 @@ class UsersService {
   async findOne(id: string, requester: AuthUser) {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: { area: true, position: true },
+      include: { area: true, position: true, manager: { select: { id: true, fullName: true } } },
     });
 
     if (!user) throw new NotFoundException('Usuário não encontrado.');
@@ -161,9 +203,26 @@ class UsersService {
     return user;
   }
 
+  // Lista de possíveis gestores diretos para o dropdown do formulário —
+  // sempre pessoas com role=GESTOR ATIVAS na área informada, excluindo a
+  // própria pessoa (quando estiver editando).
+  async findPotentialManagers(areaId: string, excludeUserId?: string) {
+    return this.prisma.user.findMany({
+      where: {
+        areaId,
+        role: UserRole.GESTOR,
+        active: true,
+        ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
+      },
+      select: { id: true, fullName: true },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
   async create(dto: CreateUserDto, creator: AuthUser) {
     const areaId = this.resolveAreaId(dto.areaId, creator);
     const role = await this.resolveRole(dto.positionId, creator, dto.asAdmin);
+    const managerId = await this.resolveManagerId(dto.managerId, areaId);
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
     return this.prisma.user.create({
@@ -174,6 +233,7 @@ class UsersService {
         areaId,
         positionId: dto.positionId,
         role,
+        managerId,
         passwordHash,
       },
     });
@@ -189,10 +249,16 @@ class UsersService {
       delete dto.areaId;
     }
 
-    // Se o cargo mudou, o role é recalculado automaticamente (fonte única de verdade).
     const data: any = { ...dto };
+
+    // Se o cargo mudou, o role é recalculado automaticamente (fonte única de verdade).
     if (dto.positionId) {
       data.role = await this.resolveRole(dto.positionId, requester, false);
+    }
+
+    if ('managerId' in dto) {
+      const areaId = dto.areaId ?? target.areaId;
+      data.managerId = await this.resolveManagerId(dto.managerId, areaId, id);
     }
 
     return this.prisma.user.update({ where: { id }, data });
@@ -217,6 +283,13 @@ class UsersController {
   @Get()
   findAll(@Req() req: { user: AuthUser }) {
     return this.usersService.findAll(req.user);
+  }
+
+  // Precisa vir ANTES de ':id' — senão o Nest trataria "managers" como um id.
+  @Roles(UserRole.ADMIN, UserRole.GESTOR)
+  @Get('managers')
+  findPotentialManagers(@Query('areaId') areaId: string, @Query('excludeUserId') excludeUserId?: string) {
+    return this.usersService.findPotentialManagers(areaId, excludeUserId);
   }
 
   @Roles(UserRole.ADMIN, UserRole.GESTOR)
