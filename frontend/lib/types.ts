@@ -136,3 +136,47 @@ export interface TeamMemberProgress {
   finalizados: number;
   percentual: number;
 }
+
+export interface PulseScoreSummary {
+  teamScore: number;
+  managerScore: number;
+  selfScore: number;
+  finalScore: number;
+  npsScore: number;
+  scoreBand: string;
+}
+
+export interface ReportComment {
+  tipo: string;
+  autor: string;
+  texto: string | null;
+}
+
+export interface AiAnalysis {
+  strengths: string;
+  improvements: string;
+  trends: string;
+  summary: string;
+  suggestedOpinion: string;
+  model: string;
+  regenCount: number;
+}
+
+export interface ReportListItem {
+  id: string;
+  status: string;
+  owner?: { id: string; fullName: string };
+  cycle: { label: string; status: string };
+}
+
+export interface ReportDetail {
+  id: string;
+  status: string;
+  managerFinalOpinion: string | null;
+  finalizedAt: string | null;
+  owner: { id: string; fullName: string; areaName: string; positionName: string };
+  cycle: { label: string; status: string };
+  score: PulseScoreSummary | null;
+  aiAnalysis: AiAnalysis | null;
+  comentarios: ReportComment[];
+}

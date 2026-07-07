@@ -10,6 +10,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { PulseCyclesModule } from './pulse-cycles/pulse-cycles.module';
 import { PulseFeedbacksModule } from './pulse-feedbacks/pulse-feedbacks.module';
 import { PulseTeamModule } from './pulse-team/pulse-team.module';
+import { PulseReportsModule } from './pulse-reports/pulse-reports.module';
+import { AnthropicModule } from './anthropic/anthropic.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { PulseTeamModule } from './pulse-team/pulse-team.module';
     PulseCyclesModule,
     PulseFeedbacksModule,
     PulseTeamModule,
+    PulseReportsModule,
+    AnthropicModule,
   ],
 })
 export class AppModule {}

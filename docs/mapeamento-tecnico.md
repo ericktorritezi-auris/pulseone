@@ -593,10 +593,16 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 
 **Correção:** `dashboard/collaborator` não calcula mais `pulseAtual` quando quem pede é `ADMIN` (nem consulta o ciclo ativo à toa). No frontend, os cards "Meu Score Atual" e "Pulse Atual" ficam ocultos pro admin, mostrando só "Área" + a nota de que o Dashboard Executivo completo (participação, pendências, NPS médio, score médio por área) chega na Sprint 5. O bloco de Feedback Contínuo (recebidos/enviados) continua aparecendo pro admin normalmente — essa parte é livre pra qualquer pessoa da organização, admin incluído.
 
-**Sprint 4 — Consolidação do Gestor + IA**
-- Tela "Avaliação do Time" (tela 4) + consolidação.
-- Integração Anthropic API para geração de análise (pontos fortes/melhoria/tendências/parecer sugerido), com persistência e regeneração.
-- Parecer final do gestor + fechamento com registro (gestor/cargo/data/hora/id).
+**Sprint 4 — Consolidação do Gestor + IA ✅ concluída**
+- `AnthropicService`: gera a análise (pontos fortes, melhoria, tendências, resumo, parecer sugerido) via Anthropic API real (`fetch` puro, sem SDK), modelo lido de `ANTHROPIC_MODEL`. Fallback textual se a API key não estiver configurada ou a chamada falhar — nunca derruba o fluxo.
+- `PulseReportsModule`: consolidação completa —
+  - `GET /pulse-reports` (gestor, seus liderados diretos) / `GET /pulse-reports/all` (admin, todos) / `GET /pulse-reports/mine` (qualquer um, os próprios) / `GET /pulse-reports/:id` (detalhe, com regra de visibilidade e anonimato aplicadas).
+  - `PATCH /pulse-reports/:id/ai-analysis` — gera/regenera a análise, avança o status de `AGUARDANDO_IA` para `AGUARDANDO_PARECER`.
+  - `PATCH /pulse-reports/:id/opinion` — salva o parecer final (rascunho, pode ser salvo várias vezes antes de finalizar).
+  - `PATCH /pulse-reports/:id/finalize` — exige parecer preenchido, grava `finalizedById` + `finalizedAt`, muda status para `FINALIZADO`.
+- **Anonimato aplicado de verdade** (PRD seção 19, estendido pra hierarquia): quem vê o **próprio** relatório enxerga colegas como "Colega 1/2/3" e liderados (se for gestor) como "Liderado 1/2/3" — só o gestor direto aparece com nome real. Gestor/Admin consolidando veem todo mundo com nome real.
+- **Quem consolida:** só o gestor direto do dono do relatório (ou admin) — o próprio dono nunca gera IA, escreve parecer ou finaliza o próprio relatório, mesmo que ele seja gestor de outras pessoas.
+- Frontend: `/relatorios` (lista, por perfil), `/relatorios/[id]` (capa com score, NPS, barras de composição, comentários, painel de IA, parecer final + botão Finalizar), `/historico` (colaborador vê os próprios ciclos — só abre o relatório completo se `FINALIZADO`).
 
 **Sprint 5 — Relatório PDF + Dashboards executivos**
 - Template HTML do relatório (tela 5) + geração via Puppeteer.
