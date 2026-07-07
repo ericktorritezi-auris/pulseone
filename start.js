@@ -19,6 +19,11 @@ const backendDir = path.join(__dirname, 'backend');
 // "prisma migrate deploy" com migrations versionadas.
 console.log('Sincronizando schema do banco de dados (prisma db push)...');
 try {
+  // Corrige dados de teste com enums antigos ANTES do push — evita o
+  // "invalid input value for enum" quando um enum troca de valores e já
+  // existem linhas usando o valor removido.
+  execSync('node prisma/fix-legacy-enum.js', { cwd: backendDir, stdio: 'inherit' });
+
   execSync('npx prisma db push --accept-data-loss --skip-generate', {
     cwd: backendDir,
     stdio: 'inherit',

@@ -579,6 +579,14 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 
 **Scoring inalterado:** `PulseScoreService` soma `AVALIACAO_EQUIPE` e `AVALIACAO_GESTOR` no mesmo balde de `managerScore` de quem está sendo avaliado — é o "score recebido na linha hierárquica direta", venha de cima (chefe) ou de baixo (liderado). A fórmula `finalScore = teamScore*0.6 + managerScore*0.4` não mudou.
 
+### 5.10 Correção de crash — migração de enum com dados de teste existentes
+
+**Causa raiz:** ao dividir `PulseEvaluationType.GESTOR` em `AVALIACAO_EQUIPE`/`AVALIACAO_GESTOR` (seção 5.9), já existiam linhas de teste em `PulseFeedback` com `type='GESTOR'` no banco (dos testes anteriores do Erick). O Postgres não consegue migrar automaticamente um enum removendo um valor que ainda está em uso — `prisma db push` entrava em loop de crash (`invalid input value for enum`).
+
+**Correção:** `backend/prisma/fix-legacy-enum.js` — script em SQL bruto (via `pg`, não via Prisma Client, já que o client gerado nem reconhece mais o valor antigo) que remove as linhas de teste com `type='GESTOR'` **antes** do `db push` rodar. Chamado automaticamente pelo `start.js`. Idempotente e seguro rodar em todo boot (não faz nada se a tabela não existir ou já estiver limpa).
+
+⚠️ **Nota para o futuro:** essa é uma correção pontual pra este caso específico. Qualquer mudança futura de enum que remova um valor já em uso por dados existentes vai precisar de um fixup parecido, feito sob medida — não é algo que dá pra automatizar de forma genérica sem saber pra onde cada dado antigo deveria migrar.
+
 **Sprint 4 — Consolidação do Gestor + IA**
 - Tela "Avaliação do Time" (tela 4) + consolidação.
 - Integração Anthropic API para geração de análise (pontos fortes/melhoria/tendências/parecer sugerido), com persistência e regeneração.
