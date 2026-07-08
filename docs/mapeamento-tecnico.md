@@ -708,6 +708,15 @@ O `puppeteer` "completo" baixa um Chromium que depende de várias bibliotecas de
 - Adicionar `archivedAt DateTime?` em `PulseCycle` (mesmo padrão de `openedAt`/`closedAt`), preenchido no momento do arquivamento.
 - Fazer "Arquivar" disparar a geração automática do PDF final de todo mundo daquele ciclo — só faz sentido depois que o Puppeteer existir, transformando o arquivamento num encerramento de verdade (com artefato final gerado), em vez de só uma troca de rótulo.
 
+### 5.19 Alterar senha — self-service para todos, redefinição só para o Admin (pedido do Erick)
+
+- **Todo mundo troca a própria senha**: tela **Meu Perfil** ganhou uma seção "Alterar Senha", usando o endpoint que já existia desde a Sprint 0 (`POST /auth/change-password`) mas nunca tinha interface — exige a senha atual + a nova.
+- **Só o ADMIN redefine a senha de qualquer pessoa**: novo endpoint `PATCH /users/:id/password` (`SetPasswordDto`), restrito a `@Roles(ADMIN)` no controller **e** checado de novo dentro do service (defesa em profundidade) — nem o gestor tem essa ação, mesmo podendo editar outros campos de quem está na própria área. Não exige a senha atual (é uma ação autorizada pelo papel, não pelo conhecimento da senha antiga), e força `mustChangePwd=true` — a pessoa é obrigada a trocar essa senha temporária no próximo login. Exposto na tela de Cadastro de Pessoas, numa seção separada do formulário principal, visível só quando quem está logado é admin.
+
+### 5.20 Correção — seed.ts quebrava após e-mail deixar de ser único
+
+Ao remover `@unique` do e-mail (seção 5.17), o `seed.ts` continuou usando `upsert({ where: { email: '...' } })` pra criar/atualizar o admin — o Prisma exige um campo `@unique` (ou `id`) pra esse tipo de busca, e o e-mail deixou de servir. Isso travava o container em loop de crash logo no passo do seed. Corrigido: `findFirst({ where: { email, role: ADMIN } })` + `create`/`update` manual por `id`, em vez de `upsert` por e-mail.
+
 ### 5.15 Unificação de status do relatório (pedido do Erick)
 
 `PulseReportStatus.AGUARDANDO_IA` e `AGUARDANDO_PARECER` viraram um único valor: **`AGUARDANDO_FECHAMENTO`** — é o único status enquanto o gestor não finaliza a consolidação (gerar a análise de IA é uma etapa opcional dentro dele, não muda o status). Fluxo final: `EM_ANDAMENTO → AGUARDANDO_FECHAMENTO → FINALIZADO → ARQUIVADO`.

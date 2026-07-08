@@ -35,6 +35,11 @@ export default function PessoasPage() {
   const [masterPasswordInput, setMasterPasswordInput] = useState('');
   const [masterError, setMasterError] = useState('');
 
+  const [adminNewPassword, setAdminNewPassword] = useState('');
+  const [adminPasswordSubmitting, setAdminPasswordSubmitting] = useState(false);
+  const [adminPasswordError, setAdminPasswordError] = useState('');
+  const [adminPasswordSuccess, setAdminPasswordSuccess] = useState(false);
+
   // REGRA (seção 5.3/5.5 do mapeamento técnico): gestor só cadastra na
   // própria área. O campo vem travado e pré-preenchido; admin escolhe livremente.
   const isGestor = user?.role === 'GESTOR';
@@ -94,6 +99,9 @@ export default function PessoasPage() {
       password: '',
     });
     setError('');
+    setAdminNewPassword('');
+    setAdminPasswordError('');
+    setAdminPasswordSuccess(false);
     setDrawerOpen(true);
   }
 
@@ -162,6 +170,24 @@ export default function PessoasPage() {
     setMasterPasswordInput('');
     setMasterError('');
     setError('Este e-mail já está cadastrado. Utilize um novo e-mail.');
+  }
+
+  // Redefinição de senha exclusiva do admin (seção 5.19) — não exige a
+  // senha atual da pessoa, é uma ação autorizada pelo papel de admin.
+  async function handleAdminResetPassword() {
+    if (!editingId || !adminNewPassword.trim()) return;
+    setAdminPasswordSubmitting(true);
+    setAdminPasswordError('');
+    setAdminPasswordSuccess(false);
+    try {
+      await api.patch(`/users/${editingId}/password`, { newPassword: adminNewPassword });
+      setAdminPasswordSuccess(true);
+      setAdminNewPassword('');
+    } catch (err) {
+      setAdminPasswordError(err instanceof Error ? err.message : 'Erro ao redefinir a senha.');
+    } finally {
+      setAdminPasswordSubmitting(false);
+    }
   }
 
   async function handleRemove(id: string) {
@@ -381,6 +407,38 @@ export default function PessoasPage() {
             </button>
           </div>
         </form>
+
+        {/* Redefinir senha — exclusivo do ADMIN, pra qualquer pessoa (seção
+            5.19). Fica fora do <form> principal de propósito, pra não
+            misturar os dois envios. */}
+        {user?.role === 'ADMIN' && editingId && (
+          <div className="mt-6 pt-6 border-t border-slate-200">
+            <h3 className="text-sm font-semibold text-p-primary-dark mb-1">Redefinir Senha</h3>
+            <p className="text-xs text-p-neutral mb-3">
+              Só o administrador pode fazer isso. A pessoa será obrigada a trocar essa senha no
+              próximo login.
+            </p>
+            <input
+              type="password"
+              value={adminNewPassword}
+              onChange={(e) => setAdminNewPassword(e.target.value)}
+              placeholder="Nova senha (mín. 8 caracteres, 1 maiúscula, 1 especial)"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-2"
+            />
+            {adminPasswordError && <p className="text-sm text-red-600 mb-2">{adminPasswordError}</p>}
+            {adminPasswordSuccess && (
+              <p className="text-sm text-p-success mb-2">Senha redefinida com sucesso.</p>
+            )}
+            <button
+              type="button"
+              onClick={handleAdminResetPassword}
+              disabled={adminPasswordSubmitting || !adminNewPassword.trim()}
+              className="w-full border border-slate-300 text-p-primary-dark py-2 rounded-lg text-sm font-medium hover:border-p-primary disabled:opacity-50"
+            >
+              {adminPasswordSubmitting ? 'Redefinindo...' : 'Redefinir senha desta pessoa'}
+            </button>
+          </div>
+        )}
       </Drawer>
 
       {masterModalOpen && (

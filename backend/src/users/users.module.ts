@@ -21,7 +21,10 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole } from '@prisma/client';
-import { IsBoolean, IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+
+// Mesmo padrão de senha forte usado em todo o sistema (auth.dto.ts).
+const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*[!@#$&*])(?=.*[0-9])(?=.*[a-z]).{8,}$/;
 
 type AuthUser = { id: string; role: UserRole; areaId: string | null };
 
@@ -74,6 +77,18 @@ class UpdateUserDto {
   @IsOptional() @IsString() positionId?: string;
   @IsOptional() @IsString() managerId?: string | null;
   @IsOptional() @IsString() masterPasswordOverride?: string;
+}
+
+// Redefinição de senha por terceiros (seção 5.19): só o ADMIN pode fazer
+// isso, pra qualquer pessoa. Ninguém mais tem essa ação — nem o gestor,
+// mesmo podendo editar outros campos da pessoa.
+class SetPasswordDto {
+  @IsString()
+  @MinLength(8)
+  @Matches(PASSWORD_REGEX, {
+    message: 'A senha deve ter no mínimo 8 caracteres, 1 maiúscula, 1 especial, letras e números.',
+  })
+  newPassword: string;
 }
 
 @Injectable()
@@ -380,6 +395,31 @@ export class UsersService {
     // Soft delete — mantém histórico de feedbacks/pulses íntegro
     return this.prisma.user.update({ where: { id }, data: { active: false } });
   }
+
+  /**
+   * REGRA DE NEGÓCIO (seção 5.19, pedido do Erick): só o ADMIN pode
+   * redefinir a senha de QUALQUER pessoa (inclusive de outro gestor ou de
+   * si mesmo). Todo mundo mais só troca a própria senha (fluxo já existente
+   * em auth.service.ts changePassword, que exige a senha atual). Aqui não
+   * exige senha atual — é uma ação administrativa, autorizada pelo papel,
+   * não pelo conhecimento da senha antiga. Força troca no próximo login,
+   * já que foi o admin quem escolheu a senha, não o dono da conta.
+   */
+  async setPasswordByAdmin(id: string, newPassword: string, requester: AuthUser) {
+    if (requester.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Só o administrador pode redefinir a senha de outra pessoa.');
+    }
+
+    await this.prisma.user.findUniqueOrThrow({ where: { id } });
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({
+      where: { id },
+      data: { passwordHash, mustChangePwd: true },
+    });
+
+    return { changed: true };
+  }
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -422,6 +462,14 @@ class UsersController {
   @Delete(':id')
   remove(@Param('id') id: string, @Req() req: { user: AuthUser }) {
     return this.usersService.remove(id, req.user);
+  }
+
+  // Só ADMIN — nem o gestor tem essa ação, mesmo podendo editar outros
+  // campos da pessoa (regra explícita do Erick, seção 5.19).
+  @Roles(UserRole.ADMIN)
+  @Patch(':id/password')
+  setPassword(@Param('id') id: string, @Body() dto: SetPasswordDto, @Req() req: { user: AuthUser }) {
+    return this.usersService.setPasswordByAdmin(id, dto.newPassword, req.user);
   }
 }
 
