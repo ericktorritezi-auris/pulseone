@@ -636,6 +636,9 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 - **Dashboard do GESTOR**: `GET /dashboard/manager` — score médio e NPS médio da equipe (liderados diretos, ciclo mais recente finalizado/arquivado), quantidade de membros + listagem com nomes e cargos. (Nota: como `managerId` exige mesma área do gestor — seção 5.7 —, o cenário "gestor de várias áreas" que o Erick mencionou não é possível na arquitetura atual; fica registrado caso vire um requisito real no futuro.)
 - **Pendente ainda nesta sprint**: Landing Page (isso é Sprint 6).
 
+**Correção pós-entrega — PDF falhando com 500 em produção:**
+O `puppeteer` "completo" baixa um Chromium que depende de várias bibliotecas de sistema (libnss3, libatk, etc.) normalmente ausentes em containers mínimos como o do Railway — causa mais comum de PDF quebrar exatamente em produção (funciona local, falha no deploy). Trocado por **`puppeteer-core` + `@sparticuz/chromium`**: um Chromium estático, compilado especificamente pra rodar em containers/serverless sem essas dependências extras. Também adicionado logging real do erro (`Logger.error` com stack trace) — antes, qualquer falha do Puppeteer virava só um 500 genérico sem rastro nenhum no log.
+
 **Dashboard do ADMIN (escopo fechado com o Erick — só administração do sistema, nada de NPS/score):**
 - Quantidade de áreas cadastradas
 - Quantidade de cargos cadastrados

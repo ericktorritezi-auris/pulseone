@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import puppeteer from 'puppeteer';
+import { Injectable, Logger } from '@nestjs/common';
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 
 interface ReportForPdf {
   status: string;
@@ -56,6 +57,8 @@ const TIPO_LABELS: Record<string, string> = {
 
 @Injectable()
 export class PulseReportPdfService {
+  private readonly logger = new Logger(PulseReportPdfService.name);
+
   buildHtml(report: ReportForPdf): string {
     const scoreColor = report.score ? SCORE_COLOR[report.score.scoreBand] ?? '#2563EB' : '#94A3B8';
     const comentariosHtml = report.comentarios
@@ -143,12 +146,20 @@ export class PulseReportPdfService {
   }
 
   async generatePdf(html: string): Promise<Buffer> {
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
+    let browser;
     try {
+      // @sparticuz/chromium: binário do Chromium compilado especificamente
+      // pra rodar em containers/serverless mínimos (como o do Railway) sem
+      // depender de bibliotecas de sistema que normalmente faltam nesses
+      // ambientes — é a causa mais comum de PDF falhar em produção com o
+      // Puppeteer "completo".
+      browser = await puppeteer.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath(),
+        headless: true,
+      });
+
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
       const pdf = await page.pdf({
@@ -157,8 +168,13 @@ export class PulseReportPdfService {
         margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' },
       });
       return Buffer.from(pdf);
+    } catch (err) {
+      // Loga o erro real no servidor (visível no log do Railway) — sem
+      // isso, o erro vira só um 500 genérico e não dá pra diagnosticar.
+      this.logger.error(`Falha ao gerar PDF via Puppeteer: ${(err as Error).message}`, (err as Error).stack);
+      throw err;
     } finally {
-      await browser.close();
+      if (browser) await browser.close();
     }
   }
 }
