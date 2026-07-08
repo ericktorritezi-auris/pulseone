@@ -3,7 +3,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole } from '@prisma/client';
 
-type AuthUser = { id: string; role: UserRole; areaId: string };
+type AuthUser = { id: string; role: UserRole; areaId: string | null };
 
 @Injectable()
 class NotificationsService {

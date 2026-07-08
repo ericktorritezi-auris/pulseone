@@ -23,7 +23,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UserRole } from '@prisma/client';
 import { IsBoolean, IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 
-type AuthUser = { id: string; role: UserRole; areaId: string };
+type AuthUser = { id: string; role: UserRole; areaId: string | null };
 
 class CreateUserDto {
   @IsString()
@@ -107,6 +107,10 @@ export class UsersService {
    */
   private resolveAreaId(dtoAreaId: string | undefined, creator: AuthUser): string {
     if (creator.role === UserRole.GESTOR) {
+      // Gestor sempre tem área (só admin não tem) — guarda defensiva pro TS.
+      if (!creator.areaId) {
+        throw new ForbiddenException('Seu usuário não está vinculado a nenhuma área.');
+      }
       return creator.areaId;
     }
     if (!dtoAreaId) {
@@ -126,10 +130,14 @@ export class UsersService {
    */
   private async resolveManagerId(
     managerId: string | undefined | null,
-    areaId: string,
+    areaId: string | null,
     selfId?: string,
   ): Promise<string | null> {
     if (!managerId) return null;
+
+    if (!areaId) {
+      throw new ForbiddenException('Só é possível indicar gestor direto para pessoas vinculadas a uma área.');
+    }
 
     if (managerId === selfId) {
       throw new ForbiddenException('Uma pessoa não pode ser gestora direta de si mesma.');
@@ -158,7 +166,7 @@ export class UsersService {
    * - Cadastro de COLABORADOR: ADMIN vê/edita qualquer um; GESTOR vê/edita
    *   só os da própria área.
    */
-  private assertCanAccessTarget(target: { id: string; role: UserRole; areaId: string }, requester: AuthUser) {
+  private assertCanAccessTarget(target: { id: string; role: UserRole; areaId: string | null }, requester: AuthUser) {
     const isSelf = target.id === requester.id;
 
     if (target.role === UserRole.ADMIN) {

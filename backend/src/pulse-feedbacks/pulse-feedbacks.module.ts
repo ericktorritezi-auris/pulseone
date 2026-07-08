@@ -18,7 +18,7 @@ import { PulseCycleStatus, PulseEvaluationStatus, UserRole } from '@prisma/clien
 import { ArrayMinSize, IsArray, IsInt, IsString, Max, Min, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
-type AuthUser = { id: string; role: UserRole; areaId: string };
+type AuthUser = { id: string; role: UserRole; areaId: string | null };
 
 class AnswerDto {
   @IsString()

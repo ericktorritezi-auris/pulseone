@@ -5,7 +5,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { PulseEvaluationStatus, UserRole } from '@prisma/client';
 
-type AuthUser = { id: string; role: UserRole; areaId: string };
+type AuthUser = { id: string; role: UserRole; areaId: string | null };
 
 /**
  * Monitoramento em tempo real do ciclo, por pessoa — pedido do Erick.

@@ -657,6 +657,14 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 - **Frontend**: tela de Pessoas detecta o erro `EMAIL_JA_EXISTE` e abre um modal pedindo a senha MASTER — se confirmar certo, o cadastro segue normalmente; se clicar em "Não tenho a senha master", fecha o modal com o aviso pra usar outro e-mail.
 - **Limitação conhecida, aceita por ora**: o fluxo de "Esqueci minha senha" usa a primeira conta encontrada com aquele e-mail, caso existam duas — cenário raro o suficiente pra não justificar mais complexidade agora.
 
+### 5.18 Correção de build — propagação de `areaId`/`positionId` opcionais
+
+Tornar `areaId`/`positionId` opcionais no schema (seção 5.16) quebrou o build real no Railway: 10 erros de tipo em `dashboard.module.ts`, `pulse-reports.module.ts` e `users.module.ts`, todos do mesmo tipo — código que ainda assumia `areaId: string` (não-nulo) em assinaturas de função e no tipo `AuthUser`, usado em quase todos os módulos.
+
+**Correção:** `type AuthUser` (declarado localmente em 7 módulos) passou a aceitar `areaId: string | null`; `assertCanAccessTarget`, `assertCanAccessReport`, `assertSelfViewReady`, `resolveAreaId`, `resolveManagerId` e `getCollaboratorDashboard` ajustados com guardas explícitas (`if (!areaId) throw/continue`) nos pontos onde a ausência de área realmente não deveria acontecer na prática (admin nunca participa de Pulse/hierarquia), mas o TypeScript precisa da garantia explícita mesmo assim.
+
+⚠️ **Nota de transparência:** esses 10 erros só apareceram no build real do Railway — o ambiente local usado pra QA aqui não tem o Prisma Client gerado de verdade (sem acesso de rede pro binário do Prisma), então os tipos derivados do schema (como a nulidade de `areaId`) não são verificáveis localmente com precisão total. A correção foi feita por raciocínio cuidadoso sobre cada mensagem de erro exata do log, mas a validação definitiva só acontece no próximo build do Railway.
+
 **Correção pós-entrega — PDF falhando com 500 em produção:**
 O `puppeteer` "completo" baixa um Chromium que depende de várias bibliotecas de sistema (libnss3, libatk, etc.) normalmente ausentes em containers mínimos como o do Railway — causa mais comum de PDF quebrar exatamente em produção (funciona local, falha no deploy). Trocado por **`puppeteer-core` + `@sparticuz/chromium`**: um Chromium estático, compilado especificamente pra rodar em containers/serverless sem essas dependências extras. Também adicionado logging real do erro (`Logger.error` com stack trace) — antes, qualquer falha do Puppeteer virava só um 500 genérico sem rastro nenhum no log.
 

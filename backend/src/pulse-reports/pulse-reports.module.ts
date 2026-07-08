@@ -24,7 +24,7 @@ import { AnthropicService } from '../anthropic/anthropic.service';
 import { PulseReportPdfService } from './pulse-report-pdf.service';
 import type { Response } from 'express';
 
-type AuthUser = { id: string; role: UserRole; areaId: string };
+type AuthUser = { id: string; role: UserRole; areaId: string | null };
 
 class SetOpinionDto {
   @IsString()
@@ -65,7 +65,7 @@ class PulseReportsService {
   }
 
   private async assertCanAccessReport(
-    report: { ownerId: string; cycleId: string; status: PulseReportStatus; owner: { managerId: string | null; areaId: string } },
+    report: { ownerId: string; cycleId: string; status: PulseReportStatus; owner: { managerId: string | null; areaId: string | null } },
     requester: AuthUser,
   ) {
     if (requester.role === UserRole.ADMIN) return;
@@ -102,10 +102,15 @@ class PulseReportsService {
   private async assertSelfViewReady(report: {
     cycleId: string;
     status: PulseReportStatus;
-    owner: { areaId: string };
+    owner: { areaId: string | null };
   }) {
     if (report.status !== PulseReportStatus.FINALIZADO) {
       throw new ForbiddenException('Seu relatório ainda não foi finalizado.');
+    }
+    if (!report.owner.areaId) {
+      // Não deveria acontecer na prática (donos de relatório sempre têm
+      // área — admin nunca participa do Pulse), mas mantém o TS seguro.
+      throw new ForbiddenException('Não foi possível verificar a consolidação da área.');
     }
     const areaReady = await this.isAreaFullyConsolidated(report.cycleId, report.owner.areaId);
     if (!areaReady) {
@@ -211,8 +216,8 @@ class PulseReportsService {
       owner: {
         id: report.owner.id,
         fullName: report.owner.fullName,
-        areaName: report.owner.area.name,
-        positionName: report.owner.position.name,
+        areaName: report.owner.area?.name ?? '—',
+        positionName: report.owner.position?.name ?? '—',
       },
       cycle: report.cycle,
       score,
@@ -242,8 +247,8 @@ class PulseReportsService {
 
     const result = await this.anthropic.generateAnalysis({
       personName: report.owner.fullName,
-      areaName: report.owner.area.name,
-      positionName: report.owner.position.name,
+      areaName: report.owner.area?.name ?? '—',
+      positionName: report.owner.position?.name ?? '—',
       finalScore: score.finalScore,
       teamScore: score.teamScore,
       managerScore: score.managerScore,

@@ -15,7 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UserRole } from '@prisma/client';
 import { IsInt, IsString, Max, Min, MinLength } from 'class-validator';
 
-type AuthUser = { id: string; role: UserRole; areaId: string };
+type AuthUser = { id: string; role: UserRole; areaId: string | null };
 
 class CreateFeedbackDto {
   @IsString()

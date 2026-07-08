@@ -5,7 +5,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { PulseCycleStatus, PulseEvaluationStatus, PulseReportStatus, UserRole } from '@prisma/client';
 
-type AuthUser = { id: string; role: UserRole; areaId: string };
+type AuthUser = { id: string; role: UserRole; areaId: string | null };
 
 @Injectable()
 class DashboardService {
@@ -24,7 +24,7 @@ class DashboardService {
     return total > 0 && total === finalizados;
   }
 
-  async getCollaboratorDashboard(userId: string, role: UserRole, areaId: string) {
+  async getCollaboratorDashboard(userId: string, role: UserRole, areaId: string | null) {
     const [ultimosRecebidos, ultimosEnviados, activeCycle] = await Promise.all([
       this.prisma.feedback.findMany({
         where: { receiverId: userId },
@@ -69,7 +69,7 @@ class DashboardService {
     const scoreEvolution: { ciclo: string; score: number }[] = [];
     let lastReleasedScore: { finalScore: number; npsScore: number } | null = null;
 
-    if (role !== UserRole.ADMIN) {
+    if (role !== UserRole.ADMIN && areaId) {
       const myScores = await this.prisma.pulseScore.findMany({
         where: { userId },
         include: { cycle: { select: { label: true, openedAt: true } } },
@@ -152,7 +152,7 @@ class DashboardService {
 
     return {
       teamSize: team.length,
-      team: team.map((t) => ({ id: t.id, fullName: t.fullName, positionName: t.position.name })),
+      team: team.map((t) => ({ id: t.id, fullName: t.fullName, positionName: t.position?.name ?? '—' })),
       scoreMedio,
       npsMedio,
       cycleLabel,
