@@ -647,6 +647,8 @@ O `puppeteer` "completo" baixa um Chromium que depende de várias bibliotecas de
 
 ⚠️ **Lição para o futuro:** ao usar qualquer configuração de build/infra específica de uma ferramenta (Nixpacks, Docker, etc.), vale confirmar primeiro qual builder o Railway está usando de fato (visível no log de **build**, não no de deploy/runtime) — os dois logs mostram informações bem diferentes, e o log de build é o único que revela se a configuração de infraestrutura foi realmente reconhecida.
 
+**Quarta camada — Chromium encontrado e iniciando, mas travando em D-Bus/crashpad:** com o `libnss3` resolvido, o Chromium passou a ser localizado e começar a subir, mas travava com `Failed to connect to the bus` (D-Bus) e erros do crash reporter (`crashpad`) tentando ler arquivos de `/sys/devices/...` que não existem no container restrito do Railway. Corrigido com um conjunto mais completo de flags de lançamento do Chromium (`--disable-breakpad` desativa o crash reporter; várias outras desativam funcionalidades de sistema/rede que não fazem sentido num ambiente headless de servidor) — é a lista de flags recomendada pela própria comunidade Puppeteer para rodar em containers restritos.
+
 **Dashboard do ADMIN (escopo fechado com o Erick — só administração do sistema, nada de NPS/score):**
 - Quantidade de áreas cadastradas
 - Quantidade de cargos cadastrados
