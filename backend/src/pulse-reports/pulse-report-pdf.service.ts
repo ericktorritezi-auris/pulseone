@@ -153,10 +153,17 @@ export class PulseReportPdfService {
       // depender de bibliotecas de sistema que normalmente faltam nesses
       // ambientes — é a causa mais comum de PDF falhar em produção com o
       // Puppeteer "completo".
+      // Defesa extra: dependendo de como o bundler/runtime resolve o
+      // pacote, o import pode vir "embrulhado" em .default. Com
+      // esModuleInterop=true isso já é resolvido corretamente, mas este
+      // fallback evita reincidência do erro "Cannot read properties of
+      // undefined (reading 'args')" caso a resolução do módulo varie.
+      const chromiumPkg: any = (chromium as any)?.args ? chromium : (chromium as any)?.default;
+
       browser = await puppeteer.launch({
-        args: chromium.args,
-        defaultViewport: chromium.defaultViewport,
-        executablePath: await chromium.executablePath(),
+        args: chromiumPkg.args,
+        defaultViewport: chromiumPkg.defaultViewport,
+        executablePath: await chromiumPkg.executablePath(),
         headless: true,
       });
 

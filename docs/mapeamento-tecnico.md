@@ -639,6 +639,8 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 **Correção pós-entrega — PDF falhando com 500 em produção:**
 O `puppeteer` "completo" baixa um Chromium que depende de várias bibliotecas de sistema (libnss3, libatk, etc.) normalmente ausentes em containers mínimos como o do Railway — causa mais comum de PDF quebrar exatamente em produção (funciona local, falha no deploy). Trocado por **`puppeteer-core` + `@sparticuz/chromium`**: um Chromium estático, compilado especificamente pra rodar em containers/serverless sem essas dependências extras. Também adicionado logging real do erro (`Logger.error` com stack trace) — antes, qualquer falha do Puppeteer virava só um 500 genérico sem rastro nenhum no log.
 
+**Causa raiz real, encontrada graças ao logging acima:** `Cannot read properties of undefined (reading 'args')` — o `tsconfig.json` do backend tinha `allowSyntheticDefaultImports: true` mas **não** tinha `esModuleInterop: true`. O primeiro só afeta checagem de tipos; o segundo é o que de fato muda o JavaScript gerado (via helper `__importDefault`) pra desembrulhar corretamente o `import x from 'pacote-commonjs'` em tempo de execução. Sem ele, `import chromium from '@sparticuz/chromium'` não resolvia certo, e `chromium.args` vinha `undefined`. Corrigido adicionando `esModuleInterop: true` — confirmado no próprio JS compilado (`__importDefault(require("@sparticuz/chromium"))` agora presente). Adicionado também um fallback defensivo no código (`chromium.args ?? chromium.default.args`) como segunda camada de proteção contra variações de empacotamento.
+
 **Dashboard do ADMIN (escopo fechado com o Erick — só administração do sistema, nada de NPS/score):**
 - Quantidade de áreas cadastradas
 - Quantidade de cargos cadastrados
