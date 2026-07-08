@@ -294,7 +294,7 @@ class PulseScoreService {
       // parecer final — ninguém está acima dele pra escrever isso. Ele só
       // precisa ver as avaliações que o time deu, então o relatório dele
       // já sai direto como FINALIZADO (pedido do Erick), sem depender de
-      // ação manual do admin nem passar por AGUARDANDO_IA/AGUARDANDO_PARECER.
+      // ação manual do admin nem passar por AGUARDANDO_FECHAMENTO.
       const target = await this.prisma.user.findUniqueOrThrow({ where: { id: targetId } });
 
       if (target.managerId === null) {
@@ -303,11 +303,11 @@ class PulseScoreService {
           data: { status: PulseReportStatus.FINALIZADO, finalizedAt: new Date() },
         });
       } else {
-        // Avança o status do relatório individual para AGUARDANDO_IA — a
-        // Sprint 4 cuida da geração da análise e do parecer final do gestor.
+        // Único status de espera enquanto o gestor não finaliza a
+        // consolidação (análise de IA é opcional dentro dele) — pedido do Erick.
         await this.prisma.pulseReport.updateMany({
           where: { cycleId, ownerId: targetId },
-          data: { status: PulseReportStatus.AGUARDANDO_IA },
+          data: { status: PulseReportStatus.AGUARDANDO_FECHAMENTO },
         });
       }
     }

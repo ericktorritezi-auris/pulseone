@@ -275,12 +275,8 @@ class PulseReportsService {
       },
     });
 
-    if (report.status === PulseReportStatus.AGUARDANDO_IA) {
-      await this.prisma.pulseReport.update({
-        where: { id },
-        data: { status: PulseReportStatus.AGUARDANDO_PARECER },
-      });
-    }
+    // Status único de espera (AGUARDANDO_FECHAMENTO) — gerar a análise de
+    // IA não muda o status, só o parecer final + finalize() fazem isso.
 
     return aiAnalysis;
   }

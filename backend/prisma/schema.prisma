@@ -40,8 +40,7 @@ enum PulseEvaluationStatus {
 
 enum PulseReportStatus {
   EM_ANDAMENTO
-  AGUARDANDO_IA
-  AGUARDANDO_PARECER
+  AGUARDANDO_FECHAMENTO
   FINALIZADO
   ARQUIVADO
 }

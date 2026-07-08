@@ -56,4 +56,54 @@ async function main() {
   }
 }
 
-main();
+/**
+ * Segunda correção: PulseReportStatus.AGUARDANDO_IA + AGUARDANDO_PARECER
+ * viraram um único valor, AGUARDANDO_FECHAMENTO (pedido do Erick).
+ *
+ * Diferente da correção acima (que era uma DIVISÃO ambígua, sem como saber
+ * pra qual valor novo cada linha antiga deveria ir), esta é uma FUSÃO
+ * inequívoca — os dois valores antigos sempre viram o mesmo valor novo.
+ * Por isso aqui é seguro ATUALIZAR os dados em vez de apagar.
+ *
+ * Sequência obrigatória: o Postgres não deixa um UPDATE usar um valor de
+ * enum que ainda não existe no tipo. Por isso primeiro adicionamos
+ * "AGUARDANDO_FECHAMENTO" ao enum ANTIGO (ainda com os valores velhos),
+ * atualizamos as linhas, e só DEPOIS o "prisma db push" remove os valores
+ * antigos (que nesse ponto já estão sem nenhuma linha usando eles).
+ */
+async function fixReportStatusMerge() {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  try {
+    await client.connect();
+
+    const enumCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM pg_type WHERE typname = 'PulseReportStatus'
+      );
+    `);
+    if (!enumCheck.rows[0].exists) {
+      console.log('Enum PulseReportStatus ainda não existe — nada a corrigir.');
+      return;
+    }
+
+    // ALTER TYPE ... ADD VALUE não pode rodar dentro de uma transação em
+    // versões mais antigas do Postgres — client.query isolado já roda fora
+    // de transação por padrão, então está seguro aqui.
+    await client.query(`ALTER TYPE "PulseReportStatus" ADD VALUE IF NOT EXISTS 'AGUARDANDO_FECHAMENTO';`);
+
+    const result = await client.query(`
+      UPDATE "PulseReport"
+      SET status = 'AGUARDANDO_FECHAMENTO'
+      WHERE status::text IN ('AGUARDANDO_IA', 'AGUARDANDO_PARECER');
+    `);
+
+    console.log(`Correção do enum: ${result.rowCount} relatório(s) migrado(s) para AGUARDANDO_FECHAMENTO.`);
+  } catch (err) {
+    console.log('Correção do enum PulseReportStatus: nada a fazer ou já corrigido antes.', err.message);
+  } finally {
+    await client.end();
+  }
+}
+
+main().then(() => fixReportStatusMerge());

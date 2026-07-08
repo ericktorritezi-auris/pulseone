@@ -61,8 +61,7 @@ enum PulseEvaluationStatus {
 
 enum PulseReportStatus {
   EM_ANDAMENTO        // avaliações do ciclo ainda em curso para este colaborador
-  AGUARDANDO_IA       // encerrado, aguardando geração/revisão da análise de IA
-  AGUARDANDO_PARECER  // IA gerada, aguardando parecer final do gestor
+  AGUARDANDO_FECHAMENTO // encerrado, score calculado — aguardando o gestor consolidar (IA opcional + parecer)
   FINALIZADO          // parecer registrado e finalizedAt preenchido — visível ao colaborador
   ARQUIVADO
 }
@@ -374,7 +373,7 @@ src/
 ├── pulse-reports/
 │   ├── GET    /pulse-reports/:id                    (COLABORADOR só recebe 200 se status=FINALIZADO
 │   │                                                  e finalizedAt preenchido; senão 403)
-│   ├── PATCH  /pulse-reports/:id/opinion            (parecer final do gestor → status=AGUARDANDO_PARECER→FINALIZADO)
+│   ├── PATCH  /pulse-reports/:id/opinion            (parecer final do gestor → status=AGUARDANDO_FECHAMENTO→FINALIZADO)
 │   ├── PATCH  /pulse-reports/:id/finalize           (FINALIZADO — grava gestor/cargo/data/hora/id + finalizedAt)
 │   ├── POST   /pulse-reports/:id/ai-analysis         (gera via Anthropic API, modelo lido de ANTHROPIC_MODEL)
 │   ├── PATCH  /pulse-reports/:id/ai-analysis/regenerate
@@ -525,7 +524,7 @@ RESEND_FROM_EMAIL=                      # ex: naoresponda@pulseone.app.br
 - Lifecycle completo do ciclo: `PulseCyclesModule` (`create`, `open`, `close`, `consolidate`, `archive`), admin-only, com transições de estado validadas.
 - `PulseAssignmentService`: gera automaticamente autoavaliação + avaliação do gestor + avaliação de colegas (todos-contra-todos), fechado por área, ao abrir o ciclo — implementação real da seção 5.1. Cria também o `PulseReport` inicial de cada colaborador e dispara notificações reais de abertura (PRD seção 26).
 - `PulseFeedbacksModule`: listar pendentes/finalizadas, buscar detalhe (com as 5 perguntas oficiais), submeter respostas + comentário (mínimo 200 caracteres). Trava de segurança independente confirma `evaluator.areaId === target.areaId` a cada submissão.
-- `PulseScoreService`: calcula `teamScore`, `managerScore`, `selfScore` (informativo), `finalScore = teamScore*0.6 + managerScore*0.4`, `npsScore` e `scoreBand`, disparado na consolidação do ciclo. Avança `PulseReport.status` para `AGUARDANDO_IA`.
+- `PulseScoreService`: calcula `teamScore`, `managerScore`, `selfScore` (informativo), `finalScore = teamScore*0.6 + managerScore*0.4`, `npsScore` e `scoreBand`, disparado na consolidação do ciclo. Avança `PulseReport.status` para `AGUARDANDO_FECHAMENTO`.
 - **Ajuste de schema**: adicionada constraint única `@@unique([pulseFeedbackId, questionId])` em `PulseAnswer`, permitindo upsert seguro de respostas.
 - Frontend: seletor de avaliações (`/pulse`), wizard completo (`/pulse/[id]`, stepper de 5 perguntas + comentário com contador de caracteres), lista intermediária para múltiplos pendentes do mesmo tipo, e tela admin de Ciclos Pulse com as ações de lifecycle.
 - Regras de anonimato na exibição de resultados consolidados e o bloqueio de visibilidade completo do colaborador antes de `FINALIZADO` ficam para a Sprint 4/5, quando o relatório em si é construído.
@@ -597,7 +596,7 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 - `AnthropicService`: gera a análise (pontos fortes, melhoria, tendências, resumo, parecer sugerido) via Anthropic API real (`fetch` puro, sem SDK), modelo lido de `ANTHROPIC_MODEL`. Fallback textual se a API key não estiver configurada ou a chamada falhar — nunca derruba o fluxo.
 - `PulseReportsModule`: consolidação completa —
   - `GET /pulse-reports` (gestor, seus liderados diretos) / `GET /pulse-reports/all` (admin, todos) / `GET /pulse-reports/mine` (qualquer um, os próprios) / `GET /pulse-reports/:id` (detalhe, com regra de visibilidade e anonimato aplicadas).
-  - `PATCH /pulse-reports/:id/ai-analysis` — gera/regenera a análise, avança o status de `AGUARDANDO_IA` para `AGUARDANDO_PARECER`.
+  - `PATCH /pulse-reports/:id/ai-analysis` — gera/regenera a análise, não muda o status (fica em `AGUARDANDO_FECHAMENTO` até o parecer ser finalizado).
   - `PATCH /pulse-reports/:id/opinion` — salva o parecer final (rascunho, pode ser salvo várias vezes antes de finalizar).
   - `PATCH /pulse-reports/:id/finalize` — exige parecer preenchido, grava `finalizedById` + `finalizedAt`, muda status para `FINALIZADO`.
 - **Anonimato aplicado de verdade** (PRD seção 19, estendido pra hierarquia): quem vê o **próprio** relatório enxerga colegas como "Colega 1/2/3" e liderados (se for gestor) como "Liderado 1/2/3" — só o gestor direto aparece com nome real. Gestor/Admin consolidando veem todo mundo com nome real.
@@ -620,7 +619,7 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 **Regra:** quem está no topo da hierarquia (`managerId = null`, ex: um Diretor sem ninguém acima no sistema) não precisa de parecer final escrito por ninguém — ele só precisa ver as avaliações que o próprio time deu sobre ele. Faz sentido: não há quem escreva esse parecer, já que ninguém está numa posição hierárquica acima dele.
 
 **Implementação:**
-- `PulseScoreService.computeForCycle`: ao calcular o score de alguém sem `managerId`, o `PulseReport` já sai direto como `FINALIZADO` (com `finalizedAt` preenchido) — pulando `AGUARDANDO_IA`/`AGUARDANDO_PARECER` inteiramente, sem depender de nenhuma ação manual do admin.
+- `PulseScoreService.computeForCycle`: ao calcular o score de alguém sem `managerId`, o `PulseReport` já sai direto como `FINALIZADO` (com `finalizedAt` preenchido) — pulando `AGUARDANDO_FECHAMENTO` inteiramente, sem depender de nenhuma ação manual do admin.
 - `PulseReportsService.finalize()`: segunda camada de segurança — só exige `managerFinalOpinion` preenchido se `owner.managerId !== null`.
 - `GET /pulse-reports/:id` retorna `requiresOpinion: boolean`, e o frontend usa isso pra esconder completamente o painel de "Parecer Final do Gestor" nesses casos, mostrando só uma nota explicando a liberação automática — a seção de "Feedbacks Recebidos" (com os comentários da equipe) continua aparecendo normalmente.
 
@@ -632,8 +631,31 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 
 **Sprint 5 — Relatório PDF + Dashboards executivos**
 - Template HTML do relatório (tela 5) + geração via Puppeteer.
-- Dashboard Admin completo (tela 4 — participação, pendências, NPS médio, score médio).
 - Histórico com gráficos de evolução.
+
+**Dashboard do ADMIN (escopo fechado com o Erick — só administração do sistema, nada de NPS/score):**
+- Quantidade de áreas cadastradas
+- Quantidade de cargos cadastrados
+- Quantidade de pessoas cadastradas por área
+- Quantidade de pulsos (ciclos) cadastrados
+- Último pulso vigente (ciclo ativo no momento)
+- Quantidade de participação de pessoas nos pulsos
+- Quantidade de pendências
+- **Não entra**: NPS médio, score médio — isso é papel do gestor, não do admin.
+
+**Dashboard do GESTOR (escopo fechado com o Erick — adiciona à visão executiva da própria gestão):**
+- NPS médio da equipe de gestão
+- Score médio — por área, se o gestor gerenciar mais de uma área; senão, score médio da área única que ele gerencia
+- Mantém o que já existe hoje: últimos feedbacks recebidos/enviados (contínuos), quantidade de participação nos pulsos
+- Quantidade de membros da equipe + **listagem** dos nomes dessa equipe
+
+**Ajuste imediato no Dashboard do ADMIN (implementado nesta rodada, antes da Sprint 5):** o admin não é vinculado a nenhuma área de verdade (a área/cargo no cadastro dele é só um artefato técnico do schema) — por isso o card "Área", o botão "Enviar Feedback" e as seções "Últimos Feedbacks Recebidos/Dados" foram escondidos do dashboard do admin. Ele vê só a saudação + a nota de que o Dashboard Executivo chega na Sprint 5.
+
+### 5.15 Unificação de status do relatório (pedido do Erick)
+
+`PulseReportStatus.AGUARDANDO_IA` e `AGUARDANDO_PARECER` viraram um único valor: **`AGUARDANDO_FECHAMENTO`** — é o único status enquanto o gestor não finaliza a consolidação (gerar a análise de IA é uma etapa opcional dentro dele, não muda o status). Fluxo final: `EM_ANDAMENTO → AGUARDANDO_FECHAMENTO → FINALIZADO → ARQUIVADO`.
+
+**Migração de dados existentes:** como já existiam relatórios de teste com os dois valores antigos, `fix-legacy-enum.js` ganhou uma segunda correção (`fixReportStatusMerge`) — diferente da correção anterior (que era uma *divisão* ambígua e por isso apagava dados), esta é uma ***fusão* inequívoca**: adiciona `AGUARDANDO_FECHAMENTO` ao enum antigo, faz `UPDATE` das linhas existentes, e só depois o `prisma db push` remove os dois valores antigos (que nesse ponto já estão sem nenhuma linha usando eles) — sem perda de nenhum dado real desta vez.
 
 **Sprint 6 — Landing Page + Auditoria + QA final**
 - Landing page pública (seção 10).

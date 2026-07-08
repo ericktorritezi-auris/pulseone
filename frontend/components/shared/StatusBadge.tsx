@@ -7,6 +7,8 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
   ABERTO: { bg: '#DBEAFE', text: '#2563EB', label: 'Aberto' },
   ENCERRADO: { bg: '#FEF3C7', text: '#F59E0B', label: 'Encerrado' },
   EM_CONSOLIDACAO: { bg: '#FEF3C7', text: '#F59E0B', label: 'Em consolidação' },
+  EM_ANDAMENTO: { bg: '#DBEAFE', text: '#2563EB', label: 'Em andamento' },
+  AGUARDANDO_FECHAMENTO: { bg: '#FEF3C7', text: '#F59E0B', label: 'Aguardando fechamento' },
   FINALIZADO: { bg: '#D1FAE5', text: '#10B981', label: 'Finalizado' },
   ARQUIVADO: { bg: '#E2E8F0', text: '#64748B', label: 'Arquivado' },
   PENDENTE: { bg: '#FEE2E2', text: '#EF4444', label: 'Pendente' },
