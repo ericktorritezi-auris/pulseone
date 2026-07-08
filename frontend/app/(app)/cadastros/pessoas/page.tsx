@@ -31,6 +31,9 @@ export default function PessoasPage() {
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [masterModalOpen, setMasterModalOpen] = useState(false);
+  const [masterPasswordInput, setMasterPasswordInput] = useState('');
+  const [masterError, setMasterError] = useState('');
 
   // REGRA (seção 5.3/5.5 do mapeamento técnico): gestor só cadastra na
   // própria área. O campo vem travado e pré-preenchido; admin escolhe livremente.
@@ -94,8 +97,7 @@ export default function PessoasPage() {
     setDrawerOpen(true);
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function submitWithOverride(masterPasswordOverride?: string) {
     setError('');
     setSubmitting(true);
     try {
@@ -107,6 +109,7 @@ export default function PessoasPage() {
           positionId: form.positionId,
           managerId: form.managerId || null,
           ...(isGestor ? {} : { areaId: form.areaId }),
+          ...(masterPasswordOverride ? { masterPasswordOverride } : {}),
         });
       } else {
         await api.post('/users', {
@@ -119,15 +122,46 @@ export default function PessoasPage() {
           // Se for gestor, o backend ignora isso de qualquer forma e usa a
           // própria área — mandamos mesmo assim por clareza no payload.
           areaId: isGestor ? user!.areaId : form.areaId,
+          ...(masterPasswordOverride ? { masterPasswordOverride } : {}),
         });
       }
       setDrawerOpen(false);
+      setMasterModalOpen(false);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar.');
+      const message = err instanceof Error ? err.message : 'Erro ao salvar.';
+      if (message.includes('EMAIL_JA_EXISTE')) {
+        if (masterPasswordOverride) {
+          // Já estava no modal tentando com uma senha — ela veio errada.
+          setMasterError('Senha MASTER incorreta. Tente novamente.');
+        } else {
+          // Primeira detecção — oferece a liberação por senha MASTER.
+          setMasterModalOpen(true);
+          setMasterError('');
+        }
+      } else {
+        setError(message);
+      }
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    await submitWithOverride();
+  }
+
+  async function handleConfirmMasterPassword() {
+    if (!masterPasswordInput.trim()) return;
+    await submitWithOverride(masterPasswordInput);
+  }
+
+  function handleNoMasterPassword() {
+    setMasterModalOpen(false);
+    setMasterPasswordInput('');
+    setMasterError('');
+    setError('Este e-mail já está cadastrado. Utilize um novo e-mail.');
   }
 
   async function handleRemove(id: string) {
@@ -192,8 +226,8 @@ export default function PessoasPage() {
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-p-neutral">{person.area.name}</td>
-                <td className="px-4 py-3 text-p-neutral">{person.position.name}</td>
+                <td className="px-4 py-3 text-p-neutral">{person.area?.name ?? '—'}</td>
+                <td className="px-4 py-3 text-p-neutral">{person.position?.name ?? '—'}</td>
                 <td className="px-4 py-3 text-p-neutral">{person.manager?.fullName ?? '—'}</td>
                 <td className="px-4 py-3">
                   <StatusBadge status={person.active ? 'ATIVO' : 'INATIVO'} />
@@ -348,6 +382,43 @@ export default function PessoasPage() {
           </div>
         </form>
       </Drawer>
+
+      {masterModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <h3 className="text-base font-semibold text-p-primary-dark mb-2">E-mail já cadastrado</h3>
+            <p className="text-sm text-p-neutral mb-4">
+              Já existe uma conta com esse e-mail — pode ser a mesma pessoa acumulando outro papel
+              no sistema (ex: é admin e também gestor de uma área). Para cadastrar esse e-mail de
+              novo, digite a senha MASTER do sistema.
+            </p>
+            <input
+              type="password"
+              autoFocus
+              value={masterPasswordInput}
+              onChange={(e) => setMasterPasswordInput(e.target.value)}
+              placeholder="Senha MASTER"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-2"
+            />
+            {masterError && <p className="text-sm text-red-600 mb-2">{masterError}</p>}
+            <div className="flex gap-3 mt-3">
+              <button
+                onClick={handleNoMasterPassword}
+                className="flex-1 border border-slate-300 text-p-primary-dark py-2.5 rounded-lg text-sm font-medium"
+              >
+                Não tenho a senha master
+              </button>
+              <button
+                onClick={handleConfirmMasterPassword}
+                disabled={submitting || !masterPasswordInput.trim()}
+                className="flex-1 bg-p-primary text-white py-2.5 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-60"
+              >
+                {submitting ? 'Verificando...' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

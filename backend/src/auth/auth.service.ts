@@ -4,6 +4,7 @@ import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ResendService } from './resend.service';
+import { UsersService } from '../users/users.module';
 import { AuditAction } from '@prisma/client';
 
 @Injectable()
@@ -12,19 +13,66 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private resend: ResendService,
+    private usersService: UsersService,
   ) {}
 
-  async login(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-      include: { area: true, position: true },
-    });
-    if (!user || !user.active) {
-      throw new UnauthorizedException('Credenciais inválidas.');
+  /**
+   * AUTOCADASTRO PÚBLICO (Sprint 6, pedido do Erick): o funcionário cria a
+   * própria conta, sem precisar de admin/gestor. Dispara a verificação de
+   * e-mail automaticamente (fluxo que já existia desde a Sprint 0, mas
+   * nunca tinha sido conectado a um cadastro de verdade até agora).
+   */
+  async register(dto: {
+    fullName: string;
+    email: string;
+    phone: string;
+    areaId: string;
+    positionId: string;
+    managerId?: string;
+    password: string;
+  }) {
+    const existing = await this.prisma.user.findFirst({ where: { email: dto.email } });
+    if (existing) {
+      throw new BadRequestException('Já existe uma conta cadastrada com esse e-mail.');
     }
 
-    const passwordMatches = await bcrypt.compare(password, user.passwordHash);
-    if (!passwordMatches) {
+    const user = await this.usersService.registerSelf(dto);
+
+    await this.prisma.auditLog.create({
+      data: { userId: user.id, action: AuditAction.CADASTRO },
+    });
+
+    // Não deixa o autocadastro falhar por causa do e-mail (ex: Resend ainda
+    // sem configurar) — a conta já foi criada, o envio é best-effort.
+    try {
+      await this.sendEmailVerification(user.id);
+    } catch {
+      // ResendService já loga o problema internamente; aqui só evitamos
+      // que a resposta do cadastro quebre por causa disso.
+    }
+
+    return { registered: true, userId: user.id };
+  }
+
+  async login(email: string, password: string) {
+    // E-mail não é mais único (seção 5.17) — a mesma pessoa pode ter mais de
+    // uma conta com o mesmo e-mail (ex: admin e gestor). A senha é quem
+    // desempata: cada conta pode ter uma senha diferente, então a senha
+    // digitada já indica pra qual conta a pessoa quer entrar.
+    const candidates = await this.prisma.user.findMany({
+      where: { email, active: true },
+      include: { area: true, position: true },
+    });
+
+    let user: (typeof candidates)[number] | null = null;
+    for (const candidate of candidates) {
+      if (await bcrypt.compare(password, candidate.passwordHash)) {
+        user = candidate;
+        break;
+      }
+    }
+
+    if (!user) {
       throw new UnauthorizedException('Credenciais inválidas.');
     }
 
@@ -43,8 +91,8 @@ export class AuthService {
         email: user.email,
         role: user.role,
         areaId: user.areaId,
-        areaName: user.area.name,
-        positionName: user.position.name,
+        areaName: user.area?.name ?? null,
+        positionName: user.position?.name ?? null,
       },
     };
   }
@@ -83,7 +131,11 @@ export class AuthService {
   }
 
   async forgotPassword(email: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    // Limitação conhecida: se existir mais de uma conta com o mesmo e-mail
+    // (seção 5.17), este fluxo reseta a senha da primeira encontrada. Caso
+    // real pra revisar no futuro se o cenário de contas duplicadas virar
+    // mais comum do que a exceção pontual que é hoje.
+    const user = await this.prisma.user.findFirst({ where: { email } });
     // Não revela se o e-mail existe ou não, por segurança.
     if (!user) return { sent: true };
 

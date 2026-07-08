@@ -64,16 +64,20 @@ enum AuditAction {
 model User {
   id            String     @id @default(uuid())
   fullName      String
-  email         String     @unique
+  email         String
   emailVerified Boolean    @default(false)
   phone         String
   passwordHash  String
   mustChangePwd Boolean    @default(false)
   role          UserRole
-  areaId        String
-  area          Area       @relation(fields: [areaId], references: [id])
-  positionId    String
-  position      Position   @relation(fields: [positionId], references: [id])
+  // Opcionais: só o ADMIN não pertence a nenhuma área/cargo (é uma entidade
+  // do sistema, não um colaborador da organização). Todo GESTOR/COLABORADOR
+  // continua exigindo os dois — a validação fica na camada de aplicação
+  // (UsersService), já que o Prisma não faz "obrigatório condicional".
+  areaId        String?
+  area          Area?      @relation(fields: [areaId], references: [id])
+  positionId    String?
+  position      Position?  @relation(fields: [positionId], references: [id])
   // Gestor direto explícito (hierarquia dentro da área): quem avalia esta
   // pessoa no tipo GESTOR, e com quem ela forma "mesmo time imediato" pra
   // fins de avaliação de colegas. Opcional — null = topo da hierarquia
@@ -95,6 +99,11 @@ model User {
   auditLogs               AuditLog[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
+
+  // Sem @unique de propósito (seção 5.17): a mesma pessoa pode ter mais de
+  // uma conta com o mesmo e-mail (ex: admin e gestor sendo a mesma pessoa).
+  // O índice é só pra performance nas buscas por e-mail (login etc.).
+  @@index([email])
 }
 
 model Area {

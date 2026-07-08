@@ -71,6 +71,9 @@ export default function LoginPage() {
           <a href="/forgot-password" className="block text-center text-sm text-p-primary hover:underline">
             Esqueci minha senha
           </a>
+          <a href="/cadastro" className="block text-center text-sm text-p-neutral hover:underline">
+            Não tem conta? Cadastre-se
+          </a>
         </form>
       </div>
     </div>

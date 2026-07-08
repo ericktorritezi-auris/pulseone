@@ -20,14 +20,18 @@ export default function ProfilePage() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-3">
-        <div className="flex justify-between text-sm">
-          <span className="text-p-neutral">Área</span>
-          <span className="text-p-primary-dark font-medium">{user.areaName}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-p-neutral">Cargo</span>
-          <span className="text-p-primary-dark font-medium">{user.positionName}</span>
-        </div>
+        {user.areaName && (
+          <div className="flex justify-between text-sm">
+            <span className="text-p-neutral">Área</span>
+            <span className="text-p-primary-dark font-medium">{user.areaName}</span>
+          </div>
+        )}
+        {user.positionName && (
+          <div className="flex justify-between text-sm">
+            <span className="text-p-neutral">Cargo</span>
+            <span className="text-p-primary-dark font-medium">{user.positionName}</span>
+          </div>
+        )}
         <div className="flex justify-between text-sm">
           <span className="text-p-neutral">Perfil de acesso</span>
           <span className="text-p-primary-dark font-medium">{user.role}</span>

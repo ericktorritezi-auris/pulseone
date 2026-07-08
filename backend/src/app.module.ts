@@ -12,6 +12,7 @@ import { PulseFeedbacksModule } from './pulse-feedbacks/pulse-feedbacks.module';
 import { PulseTeamModule } from './pulse-team/pulse-team.module';
 import { PulseReportsModule } from './pulse-reports/pulse-reports.module';
 import { AnthropicModule } from './anthropic/anthropic.module';
+import { AdminToolsModule } from './admin-tools/admin-tools.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { AnthropicModule } from './anthropic/anthropic.module';
     PulseTeamModule,
     PulseReportsModule,
     AnthropicModule,
+    AdminToolsModule,
   ],
 })
 export class AppModule {}

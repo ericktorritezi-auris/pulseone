@@ -636,6 +636,27 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 - **Dashboard do GESTOR**: `GET /dashboard/manager` — score médio e NPS médio da equipe (liderados diretos, ciclo mais recente finalizado/arquivado), quantidade de membros + listagem com nomes e cargos. (Nota: como `managerId` exige mesma área do gestor — seção 5.7 —, o cenário "gestor de várias áreas" que o Erick mencionou não é possível na arquitetura atual; fica registrado caso vire um requisito real no futuro.)
 - **Pendente ainda nesta sprint**: Landing Page (isso é Sprint 6).
 
+### 5.16 Sprint 6 — parte 1: Autocadastro, Admin sem departamento, Reset gated e Manual do Usuário
+
+**Autocadastro público (pedido do Erick):** `POST /auth/register` — o funcionário cria a própria conta sem depender de admin/gestor. Escolhe livremente área e cargo (o `role` continua sendo derivado do cargo, nunca escolhido livremente, e nunca pode virar ADMIN por essa via). Dispara o e-mail de verificação automaticamente (fluxo que existia desde a Sprint 0, mas nunca tinha sido conectado a um cadastro real até agora). Rotas públicas novas (`/public/areas`, `/public/positions`, `/public/managers`) alimentam os selects do formulário antes da pessoa ter conta. Tela `/cadastro` (fora do layout autenticado) + link "Cadastre-se" na tela de login.
+
+**Admin não pertence a nenhum departamento (correção de schema):** `User.areaId`/`positionId` passaram de obrigatórios para opcionais — só o ADMIN fica sem os dois (é uma entidade do sistema, não um colaborador da organização). Seed atualizado pra corrigir isso retroativamente em qualquer admin já existente. Todos os pontos do código/frontend que assumiam área/cargo sempre presentes foram ajustados pra lidar com `null` (login, Topbar, Meu Perfil, tabela de Pessoas).
+
+**Reset pré-lançamento — construído, nunca executado automaticamente (pedido explícito do Erick):** `POST /admin-tools/reset-test-data` (ADMIN + frase de confirmação exata `CONFIRMO-APAGAR-TODOS-OS-DADOS-DE-TESTE` no corpo da requisição) apaga todos os dados de teste (pessoas exceto admin, áreas, cargos, ciclos, feedbacks, relatórios, notificações, tokens, audit log) em ordem segura de dependência — preserva o(s) admin(s) e as 5 perguntas oficiais. Exposto na nova tela **Configurações → Zona de Perigo** (admin only, com campo de confirmação por digitação antes de habilitar o botão). Não é chamado por nenhum fluxo automático — só executa se o próprio Erick disparar pela tela, quando estiver pronto.
+
+**Manual do Usuário:** botão no Topbar (`/manual`), com seções expansíveis em linguagem não técnica, organizadas por perfil (todo mundo vê os tópicos gerais; gestor e admin veem seções extras). Usa diagramas ilustrativos simples (não prints reais — sem acesso de navegador ao domínio em produção pra capturar telas de verdade; se o Erick quiser, dá pra substituir por prints reais depois).
+
+### 5.17 E-mail duplicado com liberação por senha MASTER (pedido do Erick)
+
+**Cenário real identificado:** a mesma pessoa pode legitimamente precisar de mais de uma conta com o mesmo e-mail (ex: é admin do sistema e também gestor de uma área específica).
+
+**Mudança de arquitetura:** `User.email` deixou de ser `@unique` no banco (virou só um índice, `@@index([email])`, pra manter a performance das buscas). Isso exige que o login soubesse lidar com múltiplas contas por e-mail:
+- **Login**: busca **todas** as contas ativas com aquele e-mail e testa a senha contra cada uma (`bcrypt.compare` em loop) — a primeira que bater com a senha digitada é a conta usada. Ou seja, **a senha desempata**: contas diferentes da mesma pessoa devem ter senhas diferentes.
+- **Autocadastro público**: continua bloqueando e-mail duplicado sempre, sem exceção — a liberação por senha MASTER é exclusiva do cadastro feito por admin/gestor (não faz sentido um desconhecido se autocadastrando ter acesso a essa liberação).
+- **Cadastro/edição pelo admin/gestor** (`UsersService.assertEmailAvailable`): se o e-mail já existe, exige `masterPasswordOverride` no corpo da requisição, comparado contra a variável de ambiente `MASTER_PASSWORD`. Sem a variável configurada no servidor, a liberação fica desabilitada por padrão (erro claro, não deixa passar silenciosamente).
+- **Frontend**: tela de Pessoas detecta o erro `EMAIL_JA_EXISTE` e abre um modal pedindo a senha MASTER — se confirmar certo, o cadastro segue normalmente; se clicar em "Não tenho a senha master", fecha o modal com o aviso pra usar outro e-mail.
+- **Limitação conhecida, aceita por ora**: o fluxo de "Esqueci minha senha" usa a primeira conta encontrada com aquele e-mail, caso existam duas — cenário raro o suficiente pra não justificar mais complexidade agora.
+
 **Correção pós-entrega — PDF falhando com 500 em produção:**
 O `puppeteer` "completo" baixa um Chromium que depende de várias bibliotecas de sistema (libnss3, libatk, etc.) normalmente ausentes em containers mínimos como o do Railway — causa mais comum de PDF quebrar exatamente em produção (funciona local, falha no deploy). Trocado por **`puppeteer-core` + `@sparticuz/chromium`**: um Chromium estático, compilado especificamente pra rodar em containers/serverless sem essas dependências extras. Também adicionado logging real do erro (`Logger.error` com stack trace) — antes, qualquer falha do Puppeteer virava só um 500 genérico sem rastro nenhum no log.
 

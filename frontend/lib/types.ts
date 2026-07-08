@@ -5,9 +5,9 @@ export interface AuthUser {
   fullName: string;
   email: string;
   role: UserRole;
-  areaId: string;
-  areaName: string;
-  positionName: string;
+  areaId: string | null;
+  areaName: string | null;
+  positionName: string | null;
 }
 
 export interface LoginResponse {
@@ -39,10 +39,10 @@ export interface Person {
   phone: string;
   role: UserRole;
   active: boolean;
-  areaId: string;
-  area: Area;
-  positionId: string;
-  position: Position;
+  areaId: string | null;
+  area: Area | null;
+  positionId: string | null;
+  position: Position | null;
   managerId: string | null;
   manager: ManagerOption | null;
 }

@@ -25,12 +25,16 @@ async function main() {
     create: { name: 'Analista de Marketing', isManager: false },
   });
 
-  // Admin — seed obrigatório com troca de senha no 1º login
+  // Admin — seed obrigatório com troca de senha no 1º login. O admin NÃO
+  // pertence a nenhuma área/cargo (é uma entidade do sistema, não um
+  // colaborador da organização) — pedido explícito do Erick. O "update"
+  // abaixo corrige retroativamente qualquer admin que já tenha sido criado
+  // com área/cargo (resíduo de quando esses campos eram obrigatórios).
   const passwordHash = await bcrypt.hash('Acesso@123', 10);
 
   await prisma.user.upsert({
     where: { email: 'admin@pulseone.app.br' },
-    update: {},
+    update: { areaId: null, positionId: null },
     create: {
       fullName: 'Administrador PulseOne',
       email: 'admin@pulseone.app.br',
@@ -39,8 +43,6 @@ async function main() {
       passwordHash,
       mustChangePwd: true,
       role: UserRole.ADMIN,
-      areaId: marketing.id,
-      positionId: gerenteMarketing.id,
     },
   });
 

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ConflictException,
   Delete,
   ForbiddenException,
   Get,
@@ -54,6 +55,12 @@ class CreateUserDto {
   @IsString()
   managerId?: string;
 
+  // Liberação de e-mail duplicado (seção 5.17) — só usado quando o backend
+  // já avisou que esse e-mail existe e a pessoa confirmou a senha MASTER.
+  @IsOptional()
+  @IsString()
+  masterPasswordOverride?: string;
+
   @IsString()
   @MinLength(8)
   password: string;
@@ -66,10 +73,11 @@ class UpdateUserDto {
   @IsOptional() @IsString() areaId?: string;
   @IsOptional() @IsString() positionId?: string;
   @IsOptional() @IsString() managerId?: string | null;
+  @IsOptional() @IsString() masterPasswordOverride?: string;
 }
 
 @Injectable()
-class UsersService {
+export class UsersService {
   constructor(private prisma: PrismaService) {}
 
   /**
@@ -219,7 +227,36 @@ class UsersService {
     });
   }
 
+  /**
+   * REGRA DE NEGÓCIO — E-MAIL DUPLICADO COM LIBERAÇÃO POR SENHA MASTER
+   * (seção 5.17, pedido do Erick): a mesma pessoa pode legitimamente ter
+   * mais de uma conta com o mesmo e-mail (ex: é admin e também gestor de
+   * uma área). Por padrão, um e-mail já cadastrado bloqueia o cadastro
+   * novo — mas se quem está cadastrando confirmar a senha MASTER do
+   * sistema (variável de ambiente MASTER_PASSWORD), o cadastro prossegue
+   * normalmente, sem nenhuma inconsistência de arquitetura (e-mail não é
+   * mais @unique no banco — seção 5.17 do schema — e o login já sabe
+   * escolher a conta certa pela senha).
+   */
+  private async assertEmailAvailable(email: string, masterPasswordOverride?: string) {
+    const existing = await this.prisma.user.findFirst({ where: { email } });
+    if (!existing) return;
+
+    const masterPassword = process.env.MASTER_PASSWORD;
+    if (!masterPassword) {
+      throw new ConflictException(
+        'EMAIL_JA_EXISTE: já existe uma conta com esse e-mail, e a senha MASTER não está configurada no servidor.',
+      );
+    }
+    if (masterPasswordOverride !== masterPassword) {
+      throw new ConflictException('EMAIL_JA_EXISTE');
+    }
+    // Senha MASTER confere — segue o cadastro normalmente, mesmo e-mail duplicado.
+  }
+
   async create(dto: CreateUserDto, creator: AuthUser) {
+    await this.assertEmailAvailable(dto.email, dto.masterPasswordOverride);
+
     const areaId = this.resolveAreaId(dto.areaId, creator);
     const role = await this.resolveRole(dto.positionId, creator, dto.asAdmin);
     const managerId = await this.resolveManagerId(dto.managerId, areaId);
@@ -239,10 +276,73 @@ class UsersService {
     });
   }
 
+  /**
+   * AUTOCADASTRO PÚBLICO (Sprint 6, pedido do Erick): o funcionário se
+   * cadastra sozinho, sem precisar de admin/gestor. Ele escolhe livremente
+   * a própria área e cargo (que já existem, criados pelo admin) — o "role"
+   * continua sendo derivado do cargo (nunca escolhido livremente, e nunca
+   * pode virar ADMIN por essa via). O gestor direto é opcional, igual ao
+   * cadastro normal.
+   */
+  async registerSelf(dto: {
+    fullName: string;
+    email: string;
+    phone: string;
+    areaId: string;
+    positionId: string;
+    managerId?: string;
+    password: string;
+  }) {
+    const position = await this.prisma.position.findUniqueOrThrow({ where: { id: dto.positionId } });
+    const role = position.isManager ? UserRole.GESTOR : UserRole.COLABORADOR;
+    const managerId = await this.resolveManagerId(dto.managerId, dto.areaId);
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    return this.prisma.user.create({
+      data: {
+        fullName: dto.fullName,
+        email: dto.email,
+        phone: dto.phone,
+        areaId: dto.areaId,
+        positionId: dto.positionId,
+        role,
+        managerId,
+        passwordHash,
+        emailVerified: false,
+      },
+    });
+  }
+
+  // Listas públicas (sem autenticação) pro formulário de autocadastro poder
+  // popular os selects de área/cargo/gestor antes da pessoa ter conta.
+  findPublicAreas() {
+    return this.prisma.area.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } });
+  }
+
+  findPublicPositions() {
+    return this.prisma.position.findMany({
+      select: { id: true, name: true, isManager: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  findPublicManagers(areaId: string) {
+    return this.prisma.user.findMany({
+      where: { areaId, role: UserRole.GESTOR, active: true },
+      select: { id: true, fullName: true },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
   async update(id: string, dto: UpdateUserDto, requester: AuthUser) {
     const target = await this.prisma.user.findUniqueOrThrow({ where: { id } });
 
     this.assertCanAccessTarget(target, requester);
+
+    if (dto.email && dto.email !== target.email) {
+      await this.assertEmailAvailable(dto.email, dto.masterPasswordOverride);
+    }
+    delete dto.masterPasswordOverride;
 
     if (requester.role === UserRole.GESTOR) {
       // Gestor nunca move alguém para outra área nem promove a admin por aqui.
@@ -317,8 +417,30 @@ class UsersController {
   }
 }
 
+// Rotas públicas (sem autenticação) — só leitura, só o necessário pro
+// formulário de autocadastro popular área/cargo/gestor antes de logar.
+@Controller('public')
+class PublicUsersController {
+  constructor(private usersService: UsersService) {}
+
+  @Get('areas')
+  findAreas() {
+    return this.usersService.findPublicAreas();
+  }
+
+  @Get('positions')
+  findPositions() {
+    return this.usersService.findPublicPositions();
+  }
+
+  @Get('managers')
+  findManagers(@Query('areaId') areaId: string) {
+    return this.usersService.findPublicManagers(areaId);
+  }
+}
+
 @Module({
-  controllers: [UsersController],
+  controllers: [UsersController, PublicUsersController],
   providers: [UsersService],
   exports: [UsersService],
 })
