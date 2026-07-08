@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { ArrowLeft, Download, Sparkles } from 'lucide-react';
 import { api } from '../../../../lib/api';
 import { useAuth } from '../../../../lib/auth-context';
 import { ReportDetail } from '../../../../lib/types';
@@ -19,6 +19,7 @@ export default function RelatorioDetalhePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [generatingAi, setGeneratingAi] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   const [opinion, setOpinion] = useState('');
   const [savingOpinion, setSavingOpinion] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
@@ -62,6 +63,21 @@ export default function RelatorioDetalhePage() {
       setError(err instanceof Error ? err.message : 'Erro ao gerar análise.');
     } finally {
       setGeneratingAi(false);
+    }
+  }
+
+  async function handleDownloadPdf() {
+    setGeneratingPdf(true);
+    setError('');
+    try {
+      const blob = await api.getBlob(`/pulse-reports/${params.id}/pdf`);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao gerar o PDF.');
+    } finally {
+      setGeneratingPdf(false);
     }
   }
 
@@ -117,7 +133,19 @@ export default function RelatorioDetalhePage() {
               <p className="text-xs text-p-neutral mt-1">{report.cycle.label}</p>
             </div>
           </div>
-          <StatusBadge status={report.status} />
+          <div className="flex items-center gap-3">
+            {isFinalized && (
+              <button
+                onClick={handleDownloadPdf}
+                disabled={generatingPdf}
+                className="flex items-center gap-1.5 text-xs font-medium border border-slate-200 text-p-primary-dark px-3 py-1.5 rounded-lg hover:border-p-primary disabled:opacity-50"
+              >
+                <Download size={14} />
+                {generatingPdf ? 'Gerando PDF...' : 'Baixar PDF'}
+              </button>
+            )}
+            <StatusBadge status={report.status} />
+          </div>
         </div>
 
         {report.score && (

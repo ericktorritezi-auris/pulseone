@@ -49,4 +49,16 @@ export const api = {
   patch: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'PATCH', body: data ? JSON.stringify(data) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  // Downloads binários (ex: PDF) precisam do token de autenticação, então
+  // não dá pra usar um <a href> simples — busca como blob autenticado.
+  async getBlob(path: string): Promise<Blob> {
+    const token = getToken();
+    const res = await fetch(`${API_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      throw new Error('Não foi possível gerar o PDF.');
+    }
+    return res.blob();
+  },
 };

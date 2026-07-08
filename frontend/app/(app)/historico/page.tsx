@@ -3,20 +3,22 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Lock } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { api } from '../../../lib/api';
-import { ReportListItem } from '../../../lib/types';
+import { ReportListItem, CollaboratorDashboard } from '../../../lib/types';
 import { StatusBadge } from '../../../components/shared/StatusBadge';
 
 export default function HistoricoPage() {
   const router = useRouter();
   const [items, setItems] = useState<ReportListItem[]>([]);
+  const [evolution, setEvolution] = useState<{ ciclo: string; score: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .get<ReportListItem[]>('/pulse-reports/mine')
-      .then(setItems)
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.get<ReportListItem[]>('/pulse-reports/mine').then(setItems),
+      api.get<CollaboratorDashboard>('/dashboard/collaborator').then((d) => setEvolution(d.scoreEvolution)),
+    ]).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <p className="text-sm text-p-neutral">Carregando...</p>;
@@ -28,6 +30,21 @@ export default function HistoricoPage() {
         Seus relatórios de cada ciclo. Só é possível ver o resultado completo depois que o gestor
         finaliza o parecer.
       </p>
+
+      {evolution.length > 1 && (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
+          <p className="text-xs font-semibold text-p-neutral uppercase mb-3">Evolução do Score</p>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={evolution}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+              <XAxis dataKey="ciclo" tick={{ fontSize: 11, fill: '#64748B' }} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748B' }} />
+              <Tooltip />
+              <Line type="monotone" dataKey="score" stroke="#2563EB" strokeWidth={2} dot={{ r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {items.length === 0 ? (
         <p className="text-sm text-p-neutral">Nenhum ciclo com relatório ainda.</p>

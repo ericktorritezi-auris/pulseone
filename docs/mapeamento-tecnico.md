@@ -629,9 +629,12 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 
 **Bug 2 — score injusto quando falta uma vertical:** se `colegaScores` ou `gestorScores` vier vazio (ex: um gestor sem par de mesmo nível pra receber avaliação de colega), a média daquela vertical é `0` por falta de dado — mas a fórmula fixa `teamScore*0.6 + managerScore*0.4` tratava esse `0` como nota real, derrubando o `finalScore` injustamente. Corrigido: o peso é redistribuído dinamicamente — se só uma vertical tem dado, ela recebe 100% do peso; só quando as duas têm dado é que volta ao 60/40 padrão.
 
-**Sprint 5 — Relatório PDF + Dashboards executivos**
-- Template HTML do relatório (tela 5) + geração via Puppeteer.
-- Histórico com gráficos de evolução.
+**Sprint 5 — Relatório PDF + Dashboards executivos ✅ (parte 1 concluída nesta rodada)**
+- **PDF do relatório**: `PulseReportPdfService` — template HTML próprio (sem depender de React/recharts no backend, só HTML/CSS/SVG puro) + Puppeteer headless (`--no-sandbox`, necessário em containers). Reaproveita 100% a lógica de permissão e anonimato do `findOne()` — o PDF nunca mostra mais do que a pessoa já veria na tela. Rota `GET /pulse-reports/:id/pdf`, botão "Baixar PDF" na tela de relatório (só aparece quando `FINALIZADO`). Rodapé "Versão 1.0.0 • Desenvolvido por BellePlanner" já incluso, fechando a pendência que faltava desde a decisão de branding.
+- **Score/NPS/Evolução do colaborador conectados de verdade**: `dashboard/collaborator` deixou de retornar `null` fixo — calcula a partir de `PulseScore`, respeitando a mesma trava de liberação em lote por área (seção 5.12) usada no relatório completo. `/historico` ganhou gráfico de evolução (recharts, `LineChart`) quando há 2+ ciclos liberados.
+- **Dashboard do ADMIN**: `GET /dashboard/admin` — áreas, cargos, pessoas por área, pulsos cadastrados, pulso vigente, participação % e pendências do ciclo ativo. Nada de NPS/score, como combinado.
+- **Dashboard do GESTOR**: `GET /dashboard/manager` — score médio e NPS médio da equipe (liderados diretos, ciclo mais recente finalizado/arquivado), quantidade de membros + listagem com nomes e cargos. (Nota: como `managerId` exige mesma área do gestor — seção 5.7 —, o cenário "gestor de várias áreas" que o Erick mencionou não é possível na arquitetura atual; fica registrado caso vire um requisito real no futuro.)
+- **Pendente ainda nesta sprint**: Landing Page (isso é Sprint 6).
 
 **Dashboard do ADMIN (escopo fechado com o Erick — só administração do sistema, nada de NPS/score):**
 - Quantidade de áreas cadastradas
@@ -650,6 +653,11 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 - Quantidade de membros da equipe + **listagem** dos nomes dessa equipe
 
 **Ajuste imediato no Dashboard do ADMIN (implementado nesta rodada, antes da Sprint 5):** o admin não é vinculado a nenhuma área de verdade (a área/cargo no cadastro dele é só um artefato técnico do schema) — por isso o card "Área", o botão "Enviar Feedback" e as seções "Últimos Feedbacks Recebidos/Dados" foram escondidos do dashboard do admin. Ele vê só a saudação + a nota de que o Dashboard Executivo chega na Sprint 5.
+
+**Pendências combinadas para a Sprint 5 (arquivamento de ciclo — decisão do Erick):** hoje "Arquivar" só troca `PulseCycle.status` para `ARQUIVADO`, sem mais nenhum efeito (nada se move, nada se apaga, ninguém perde acesso). Combinado de deixar assim por enquanto e resolver tudo junto quando o Puppeteer estiver pronto:
+- Conectar o `AuditLog`/`AuditInterceptor` (existem desde a Sprint 0, mas nunca foram ligados às ações reais do ciclo) às 5 ações do ciclo (`open`, `close`, `consolidate`, `finalize`, `archive`) — quem fez, quando, qual ciclo.
+- Adicionar `archivedAt DateTime?` em `PulseCycle` (mesmo padrão de `openedAt`/`closedAt`), preenchido no momento do arquivamento.
+- Fazer "Arquivar" disparar a geração automática do PDF final de todo mundo daquele ciclo — só faz sentido depois que o Puppeteer existir, transformando o arquivamento num encerramento de verdade (com artefato final gerado), em vez de só uma troca de rótulo.
 
 ### 5.15 Unificação de status do relatório (pedido do Erick)
 

@@ -182,3 +182,21 @@ export interface ReportDetail {
   aiAnalysis: AiAnalysis | null;
   comentarios: ReportComment[];
 }
+
+export interface AdminDashboardData {
+  totalAreas: number;
+  totalCargos: number;
+  pessoasPorArea: { areaName: string; total: number }[];
+  totalPulsos: number;
+  pulsoVigente: { label: string; deadline: string | null } | null;
+  participacaoPercentual: number | null;
+  pendencias: number;
+}
+
+export interface ManagerDashboardData {
+  teamSize: number;
+  team: { id: string; fullName: string; positionName: string }[];
+  scoreMedio: number | null;
+  npsMedio: number | null;
+  cycleLabel: string | null;
+}

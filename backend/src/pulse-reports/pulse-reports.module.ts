@@ -10,6 +10,7 @@ import {
   Param,
   Patch,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -20,6 +21,8 @@ import { PulseEvaluationStatus, PulseEvaluationType, PulseReportStatus, UserRole
 import { IsOptional, IsString, MinLength } from 'class-validator';
 import { AnthropicModule } from '../anthropic/anthropic.module';
 import { AnthropicService } from '../anthropic/anthropic.service';
+import { PulseReportPdfService } from './pulse-report-pdf.service';
+import type { Response } from 'express';
 
 type AuthUser = { id: string; role: UserRole; areaId: string };
 
@@ -352,7 +355,10 @@ class PulseReportsService {
 @UseGuards(JwtAuthGuard)
 @Controller('pulse-reports')
 class PulseReportsController {
-  constructor(private pulseReportsService: PulseReportsService) {}
+  constructor(
+    private pulseReportsService: PulseReportsService,
+    private pdfService: PulseReportPdfService,
+  ) {}
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.GESTOR)
@@ -376,6 +382,22 @@ class PulseReportsController {
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req: { user: AuthUser }) {
     return this.pulseReportsService.findOne(id, req.user);
+  }
+
+  // Reaproveita findOne() por completo — mesma checagem de permissão e
+  // mesma regra de anonimato já aplicadas, só troca a saída de JSON pra PDF.
+  @Get(':id/pdf')
+  async getPdf(@Param('id') id: string, @Req() req: { user: AuthUser }, @Res() res: Response) {
+    const report = await this.pulseReportsService.findOne(id, req.user);
+    const html = this.pdfService.buildHtml(report as any);
+    const buffer = await this.pdfService.generatePdf(html);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="relatorio-${report.owner.fullName.replace(/\s+/g, '-')}-${report.cycle.label.replace(/\s+/g, '-')}.pdf"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
   }
 
   @UseGuards(RolesGuard)
@@ -403,6 +425,6 @@ class PulseReportsController {
 @Module({
   imports: [AnthropicModule],
   controllers: [PulseReportsController],
-  providers: [PulseReportsService],
+  providers: [PulseReportsService, PulseReportPdfService],
 })
 export class PulseReportsModule {}
