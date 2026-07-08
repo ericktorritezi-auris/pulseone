@@ -1,0 +1,8 @@
+# Instrui o Nixpacks (builder padrão do Railway) a instalar o Chromium como
+# pacote de sistema durante o build — resolve de vez o problema de
+# bibliotecas de sistema ausentes (libnss3 e outras) que o Chromium
+# empacotado dentro do node_modules (via puppeteer/@sparticuz/chromium)
+# não conseguia carregar sozinho. O Nix garante todas as dependências
+# corretas do Chromium, sem precisar listar cada biblioteca manualmente.
+[phases.setup]
+nixPkgs = ["chromium"]

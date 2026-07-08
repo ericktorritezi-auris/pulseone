@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
+import { execSync } from 'child_process';
 
 interface ReportForPdf {
   status: string;
@@ -58,6 +58,25 @@ const TIPO_LABELS: Record<string, string> = {
 @Injectable()
 export class PulseReportPdfService {
   private readonly logger = new Logger(PulseReportPdfService.name);
+
+  // Resolve o binário do Chromium instalado como pacote de sistema pelo
+  // Nixpacks (ver nixpacks.toml na raiz do repo) — evita de vez o problema
+  // de bibliotecas de sistema ausentes que o Chromium empacotado dentro do
+  // node_modules (puppeteer / @sparticuz/chromium) enfrentava no Railway.
+  private resolveChromiumPath(): string {
+    const candidates = ['chromium', 'chromium-browser', 'google-chrome-stable', 'google-chrome'];
+    for (const bin of candidates) {
+      try {
+        const path = execSync(`which ${bin}`, { encoding: 'utf-8' }).trim();
+        if (path) return path;
+      } catch {
+        // tenta o próximo candidato
+      }
+    }
+    throw new Error(
+      'Chromium não encontrado no sistema. Confirme que o nixpacks.toml (nixPkgs = ["chromium"]) foi aplicado no build do Railway.',
+    );
+  }
 
   buildHtml(report: ReportForPdf): string {
     const scoreColor = report.score ? SCORE_COLOR[report.score.scoreBand] ?? '#2563EB' : '#94A3B8';
@@ -148,23 +167,12 @@ export class PulseReportPdfService {
   async generatePdf(html: string): Promise<Buffer> {
     let browser;
     try {
-      // @sparticuz/chromium: binário do Chromium compilado especificamente
-      // pra rodar em containers/serverless mínimos (como o do Railway) sem
-      // depender de bibliotecas de sistema que normalmente faltam nesses
-      // ambientes — é a causa mais comum de PDF falhar em produção com o
-      // Puppeteer "completo".
-      // Defesa extra: dependendo de como o bundler/runtime resolve o
-      // pacote, o import pode vir "embrulhado" em .default. Com
-      // esModuleInterop=true isso já é resolvido corretamente, mas este
-      // fallback evita reincidência do erro "Cannot read properties of
-      // undefined (reading 'args')" caso a resolução do módulo varie.
-      const chromiumPkg: any = (chromium as any)?.args ? chromium : (chromium as any)?.default;
+      const executablePath = this.resolveChromiumPath();
 
       browser = await puppeteer.launch({
-        args: chromiumPkg.args,
-        defaultViewport: chromiumPkg.defaultViewport,
-        executablePath: await chromiumPkg.executablePath(),
+        executablePath,
         headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
       });
 
       const page = await browser.newPage();
