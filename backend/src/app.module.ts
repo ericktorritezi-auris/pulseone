@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -13,6 +14,8 @@ import { PulseTeamModule } from './pulse-team/pulse-team.module';
 import { PulseReportsModule } from './pulse-reports/pulse-reports.module';
 import { AnthropicModule } from './anthropic/anthropic.module';
 import { AdminToolsModule } from './admin-tools/admin-tools.module';
+import { AuditInterceptor } from './common/interceptors/audit.interceptor';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -30,6 +33,13 @@ import { AdminToolsModule } from './admin-tools/admin-tools.module';
     PulseReportsModule,
     AnthropicModule,
     AdminToolsModule,
+    AuditLogsModule,
+  ],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
+    },
   ],
 })
 export class AppModule {}

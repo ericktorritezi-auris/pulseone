@@ -17,6 +17,7 @@ import {
   Settings,
   LogOut,
   FileText,
+  ScrollText,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
 
@@ -49,6 +50,7 @@ const ADMIN_MENU: MenuItem[] = [
   { href: '/cadastros/cargos', label: 'Cargos', icon: Briefcase },
   { href: '/ciclos-pulse', label: 'Ciclos Pulse', icon: RefreshCw },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
+  { href: '/auditoria', label: 'Auditoria', icon: ScrollText },
   { href: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
 

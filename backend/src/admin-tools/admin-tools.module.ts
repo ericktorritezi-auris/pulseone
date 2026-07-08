@@ -11,8 +11,9 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Audit } from '../common/decorators/audit.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole } from '@prisma/client';
+import { UserRole, AuditAction } from '@prisma/client';
 import { IsString } from 'class-validator';
 
 // Frase fixa de confirmação — pedido explícito do Erick: o reset NUNCA
@@ -120,6 +121,7 @@ class AdminToolsService {
 class AdminToolsController {
   constructor(private adminToolsService: AdminToolsService) {}
 
+  @Audit(AuditAction.EXCLUSAO)
   @Post('reset-test-data')
   resetTestData(@Body() dto: ResetTestDataDto) {
     return this.adminToolsService.resetTestData(dto.confirmationPhrase, dto.masterPassword);

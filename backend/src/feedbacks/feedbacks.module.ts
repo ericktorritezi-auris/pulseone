@@ -11,8 +11,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { Audit } from '../common/decorators/audit.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole } from '@prisma/client';
+import { UserRole, AuditAction } from '@prisma/client';
 import { IsInt, IsString, Max, Min, MinLength } from 'class-validator';
 
 type AuthUser = { id: string; role: UserRole; areaId: string | null };
@@ -115,6 +116,7 @@ class FeedbacksService {
 class FeedbacksController {
   constructor(private feedbacksService: FeedbacksService) {}
 
+  @Audit(AuditAction.FEEDBACK)
   @Post()
   create(@Body() dto: CreateFeedbackDto, @Req() req: { user: AuthUser }) {
     return this.feedbacksService.create(dto, req.user);

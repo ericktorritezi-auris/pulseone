@@ -51,4 +51,59 @@ export class ResendService {
              <p>Se você não solicitou, ignore este e-mail. Este link expira em ${process.env.PASSWORD_RESET_TOKEN_TTL_HOURS ?? 2} horas.</p>`,
     });
   }
+
+  /**
+   * E-mail de abertura de ciclo Pulse (pedido do Erick): disparado pra
+   * todo mundo que tem avaliação pendente no ciclo recém-aberto (o admin
+   * nunca recebe, já que nunca participa do Pulse — seção 5.7).
+   */
+  async sendPulseCycleOpened(
+    to: string,
+    fullName: string,
+    cycleLabel: string,
+    pendingCount: number,
+    deadlineStr: string,
+  ) {
+    if (!this.resend) {
+      this.logger.warn(`Envio de e-mail de abertura de ciclo ignorado (Resend não configurado). Destinatário: ${to}`);
+      return null;
+    }
+    return this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: `${cycleLabel} está aberto — precisamos do seu feedback`,
+      html: `<p>Olá, ${fullName.split(' ')[0]}!</p>
+             <p>O ciclo <b>${cycleLabel}</b> de feedback 360° foi aberto, e você possui
+             <b>${pendingCount} avaliação(ões) pendente(s)</b>.</p>
+             <p>Prazo: ${deadlineStr}.</p>
+             <p><a href="${process.env.APP_URL}/pulse">Acesse o PulseOne pra responder</a></p>`,
+    });
+  }
+
+  /**
+   * E-mail de encerramento definitivo do ciclo (pedido do Erick, seção
+   * "ciclos arquivados"): dispara quando o admin arquiva o ciclo, com o
+   * PDF final do relatório de cada pessoa anexado — o registro que ela
+   * leva pra casa.
+   */
+  async sendPulseReportArchived(to: string, fullName: string, cycleLabel: string, pdfBuffer: Buffer) {
+    if (!this.resend) {
+      this.logger.warn(`Envio de e-mail de arquivamento ignorado (Resend não configurado). Destinatário: ${to}`);
+      return null;
+    }
+    return this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: `${cycleLabel} — seu relatório final`,
+      html: `<p>Olá, ${fullName.split(' ')[0]}!</p>
+             <p>O ciclo <b>${cycleLabel}</b> foi encerrado e arquivado. Segue em anexo o seu
+             relatório final em PDF.</p>`,
+      attachments: [
+        {
+          filename: `relatorio-${cycleLabel.replace(/\s+/g, '-')}.pdf`,
+          content: pdfBuffer,
+        },
+      ],
+    });
+  }
 }

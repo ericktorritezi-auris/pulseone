@@ -14,13 +14,20 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Audit } from '../common/decorators/audit.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { ResendService } from '../auth/resend.service';
+import { EmailModule } from '../email/email.module';
+import { PulseReportsService } from '../pulse-reports/pulse-reports.module';
+import { PulseReportPdfService } from '../pulse-reports/pulse-report-pdf.service';
+import { PulseReportsModule } from '../pulse-reports/pulse-reports.module';
 import {
   PulseCycleStatus,
   PulseEvaluationType,
   PulseEvaluationStatus,
   PulseReportStatus,
   UserRole,
+  AuditAction,
 } from '@prisma/client';
 import { IsOptional, IsString, MinLength } from 'class-validator';
 
@@ -54,7 +61,10 @@ class OpenCycleDto {
  */
 @Injectable()
 class PulseAssignmentService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private resend: ResendService,
+  ) {}
 
   async generateForCycle(cycleId: string) {
     const areas = await this.prisma.area.findMany({
@@ -157,6 +167,25 @@ class PulseAssignmentService {
         message: `Você possui ${count} avaliação(ões) pendente(s). Prazo: ${deadlineStr}.`,
       })),
     });
+
+    // E-mail de abertura do ciclo (pedido do Erick) — só pra quem tem
+    // avaliação pendente, o que já exclui o admin naturalmente (ele nunca
+    // entra em feedbacksToCreate — seção 5.7). Best-effort: uma falha de
+    // e-mail isolada não pode derrubar a abertura do ciclo inteiro.
+    const recipients = await this.prisma.user.findMany({
+      where: { id: { in: Array.from(pendingByUser.keys()) } },
+      select: { id: true, email: true, fullName: true },
+    });
+
+    for (const recipient of recipients) {
+      const count = pendingByUser.get(recipient.id) ?? 0;
+      try {
+        await this.resend.sendPulseCycleOpened(recipient.email, recipient.fullName, cycle.label, count, deadlineStr);
+      } catch (err) {
+        // Loga e segue — e-mail é dependência externa, não pode travar a abertura do ciclo.
+        console.error(`Falha ao enviar e-mail de abertura de ciclo para ${recipient.email}:`, err);
+      }
+    }
 
     return { feedbacksGerados: feedbacksToCreate.length, reportsGerados: reportsToCreate.length };
   }
@@ -322,6 +351,9 @@ class PulseCyclesService {
     private prisma: PrismaService,
     private assignmentService: PulseAssignmentService,
     private scoreService: PulseScoreService,
+    private pulseReportsService: PulseReportsService,
+    private pdfService: PulseReportPdfService,
+    private resend: ResendService,
   ) {}
 
   findAll() {
@@ -377,12 +409,45 @@ class PulseCyclesService {
     return { cycle: await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id } }), ...result };
   }
 
+  /**
+   * Arquivar (pedido do Erick, seção "ciclos arquivados"): grava
+   * `archivedAt` e, pra transformar isso num encerramento de verdade,
+   * gera e manda por e-mail o PDF final de cada pessoa com relatório
+   * FINALIZADO nesse ciclo — o registro que ela leva pra casa.
+   *
+   * Best-effort por pessoa: se o PDF de uma pessoa falhar (raro, mas
+   * possível), loga e segue pras próximas — uma falha isolada não pode
+   * impedir o arquivamento do ciclo inteiro.
+   */
   async archive(id: string) {
     const cycle = await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id } });
     if (cycle.status !== PulseCycleStatus.FINALIZADO) {
       throw new ForbiddenException('Só é possível arquivar um ciclo FINALIZADO.');
     }
-    return this.prisma.pulseCycle.update({ where: { id }, data: { status: PulseCycleStatus.ARQUIVADO } });
+
+    const updated = await this.prisma.pulseCycle.update({
+      where: { id },
+      data: { status: PulseCycleStatus.ARQUIVADO, archivedAt: new Date() },
+    });
+
+    const reports = await this.prisma.pulseReport.findMany({
+      where: { cycleId: id, status: PulseReportStatus.FINALIZADO },
+      include: { owner: { select: { email: true, fullName: true } } },
+    });
+
+    for (const report of reports) {
+      try {
+        const reportData = await this.pulseReportsService.getReportForArchiveEmail(report.id);
+        if (!reportData) continue;
+        const html = this.pdfService.buildHtml(reportData as any);
+        const pdfBuffer = await this.pdfService.generatePdf(html);
+        await this.resend.sendPulseReportArchived(report.owner.email, report.owner.fullName, cycle.label, pdfBuffer);
+      } catch (err) {
+        console.error(`Falha ao gerar/enviar PDF de arquivamento para ${report.owner.email}:`, err);
+      }
+    }
+
+    return updated;
   }
 
   /**
@@ -522,31 +587,37 @@ class PulseCyclesController {
     return this.pulseCyclesService.findAll();
   }
 
+  @Audit(AuditAction.CADASTRO)
   @Post()
   create(@Body() dto: CreateCycleDto) {
     return this.pulseCyclesService.create(dto);
   }
 
+  @Audit(AuditAction.EDICAO)
   @Patch(':id/open')
   open(@Param('id') id: string, @Body() dto: OpenCycleDto) {
     return this.pulseCyclesService.open(id, dto);
   }
 
+  @Audit(AuditAction.FECHAMENTO)
   @Patch(':id/close')
   close(@Param('id') id: string) {
     return this.pulseCyclesService.close(id);
   }
 
+  @Audit(AuditAction.FECHAMENTO)
   @Patch(':id/consolidate')
   consolidate(@Param('id') id: string) {
     return this.pulseCyclesService.consolidate(id);
   }
 
+  @Audit(AuditAction.FECHAMENTO)
   @Patch(':id/finalize')
   finalize(@Param('id') id: string) {
     return this.pulseCyclesService.finalize(id);
   }
 
+  @Audit(AuditAction.FECHAMENTO)
   @Patch(':id/archive')
   archive(@Param('id') id: string) {
     return this.pulseCyclesService.archive(id);
@@ -564,6 +635,7 @@ class PulseCyclesController {
 }
 
 @Module({
+  imports: [EmailModule, PulseReportsModule],
   controllers: [PulseCyclesController],
   providers: [PulseCyclesService, PulseAssignmentService, PulseScoreService],
   exports: [PulseAssignmentService, PulseScoreService],

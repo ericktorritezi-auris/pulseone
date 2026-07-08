@@ -20,7 +20,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole } from '@prisma/client';
+import { UserRole, AuditAction } from '@prisma/client';
+import { Audit } from '../common/decorators/audit.decorator';
 import { IsBoolean, IsEmail, IsOptional, IsString, Matches, MinLength } from 'class-validator';
 
 // Mesmo padrão de senha forte usado em todo o sistema (auth.dto.ts).
@@ -447,18 +448,21 @@ class UsersController {
   }
 
   @Roles(UserRole.ADMIN, UserRole.GESTOR)
+  @Audit(AuditAction.CADASTRO)
   @Post()
   create(@Body() dto: CreateUserDto, @Req() req: { user: AuthUser }) {
     return this.usersService.create(dto, req.user);
   }
 
   @Roles(UserRole.ADMIN, UserRole.GESTOR)
+  @Audit(AuditAction.EDICAO)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateUserDto, @Req() req: { user: AuthUser }) {
     return this.usersService.update(id, dto, req.user);
   }
 
   @Roles(UserRole.ADMIN, UserRole.GESTOR)
+  @Audit(AuditAction.EXCLUSAO)
   @Delete(':id')
   remove(@Param('id') id: string, @Req() req: { user: AuthUser }) {
     return this.usersService.remove(id, req.user);
@@ -467,6 +471,7 @@ class UsersController {
   // Só ADMIN — nem o gestor tem essa ação, mesmo podendo editar outros
   // campos da pessoa (regra explícita do Erick, seção 5.19).
   @Roles(UserRole.ADMIN)
+  @Audit(AuditAction.EDICAO)
   @Patch(':id/password')
   setPassword(@Param('id') id: string, @Body() dto: SetPasswordDto, @Req() req: { user: AuthUser }) {
     return this.usersService.setPasswordByAdmin(id, dto.newPassword, req.user);

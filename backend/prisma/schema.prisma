@@ -171,6 +171,7 @@ model PulseCycle {
   openedAt   DateTime?
   deadline   DateTime?
   closedAt   DateTime?
+  archivedAt DateTime?
   createdAt  DateTime         @default(now())
 
   pulseFeedbacks PulseFeedback[]

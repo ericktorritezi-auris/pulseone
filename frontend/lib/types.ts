@@ -200,3 +200,12 @@ export interface ManagerDashboardData {
   npsMedio: number | null;
   cycleLabel: string | null;
 }
+
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  entity: string | null;
+  entityId: string | null;
+  createdAt: string;
+  user: { fullName: string; email: string } | null;
+}

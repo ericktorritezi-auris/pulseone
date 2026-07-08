@@ -641,6 +641,35 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
   - **Correção encontrada no processo**: a fonte Inter (mandatória no design system) nunca tinha sido carregada de verdade no projeto — só declarada no CSS, sem `@font-face`/`next/font`, caindo no sans-serif do sistema. Corrigido via `next/font/google` no `layout.tsx`.
 - **Pendente ainda**: Auditoria completa (ligar `AuditLog`/`AuditInterceptor` às ações reais do sistema) e QA final de fechamento.
 
+### 5.22 Auditoria completa — conectada de vez (fecha a Sprint 6)
+
+A estrutura (`AuditLog`, `AuditInterceptor`) existia desde a Sprint 0, mas nunca tinha sido ligada a nenhuma ação real — o interceptor lia uma metadata (`auditAction`) que nenhum decorator jamais definia.
+
+**Correção:**
+- Novo decorator `@Audit(AuditAction.X)` (`common/decorators/audit.decorator.ts`), usando `SetMetadata`.
+- `AuditInterceptor` registrado **globalmente** via `APP_INTERCEPTOR` em `app.module.ts` — não precisa aplicar em cada controller manualmente, só decorar a rota que deve ser auditada.
+- `@Audit(...)` aplicado em toda ação que o PRD seção 25 pede: Pessoas (criar/editar/excluir/redefinir senha), Áreas, Cargos, Feedback contínuo, respostas do Pulse, as 6 ações do ciclo (criar/abrir/encerrar/consolidar/finalizar/arquivar), Relatórios (gerar IA/parecer/finalizar/baixar PDF), e o reset de dados de teste.
+- **Nova rota `POST /auth/logout`**: como o JWT é stateless (não existe sessão pra invalidar no servidor), essa rota existe só pra registrar o `LOGOUT` — o frontend chama antes de limpar a sessão local (fire-and-forget, nunca bloqueia o logout se falhar).
+- **Nova tela `/auditoria`** (admin only): lista os registros mais recentes, com filtro por tipo de ação — fecha a exigência de "log completo + tela de consulta" do PRD.
+
+Login/registro continuam com gravação inline em `auth.service.ts` (já existiam desde a Sprint 0) — não duplicados pelo interceptor.
+
+### 5.23 Disparo real de e-mails + fechamento definitivo do arquivamento de ciclo (pedido do Erick)
+
+**Diagnóstico antes de mexer:** "Esqueci minha senha" e o e-mail de verificação do autocadastro já funcionavam de verdade desde antes (usam o Resend real, `ResendService.sendPasswordReset`/`sendEmailVerification`). O que **não existia**: e-mail de abertura de ciclo Pulse (só havia notificação in-app) e o fechamento completo do arquivamento (pendente desde a Sprint 5, aguardando o Puppeteer ficar pronto — e agora está).
+
+**`EmailModule` (novo):** extrai o `ResendService` do `AuthModule` pra um módulo próprio, exportável — evita acoplar módulos que só precisam mandar e-mail (como `PulseCyclesModule`) ao `AuthModule` inteiro (que também traz `JwtModule`/`PassportModule`/`AuthController`).
+
+**E-mail de abertura de ciclo:** `ResendService.sendPulseCycleOpened` — disparado em `PulseAssignmentService.generateForCycle`, pra cada pessoa com avaliação pendente (o que já exclui o admin naturalmente, já que ele nunca entra em `feedbacksToCreate` — seção 5.7). Best-effort por pessoa: uma falha de e-mail isolada não derruba a abertura do ciclo inteiro.
+
+**Arquivamento de ciclo, fechado de vez:**
+- `PulseCycle.archivedAt` (novo campo) — preenchido no momento do arquivamento, mesmo padrão de `openedAt`/`closedAt`.
+- `archive()` agora gera o **PDF final de cada pessoa** com relatório `FINALIZADO` nesse ciclo e manda por e-mail como anexo (`ResendService.sendPulseReportArchived`) — o registro que a pessoa leva pra casa. Transforma o arquivamento num encerramento de verdade, não só uma troca de status.
+- Pra isso, `findOne()` do `PulseReportsService` foi refatorado: a lógica de montagem do relatório (`buildReportDetail`) foi extraída pra um método privado reaproveitável, e um novo método público `getReportForArchiveEmail(id)` monta os mesmos dados **sem checagem de permissão de usuário** (é uma ação em lote interna, já protegida por ser exclusiva do admin na rota de arquivar) — sempre como se fosse o próprio dono vendo (anonimato aplicado), já que é o PDF que essa pessoa recebe de verdade.
+- `PulseReportsService` e `PulseReportPdfService` agora são exportados do `PulseReportsModule`, importado por `PulseCyclesModule` (sem risco de dependência circular — `PulseReportsModule` não importa `PulseCyclesModule`).
+
+⚠️ **Pendente de decisão do Erick (não implementado ainda):** o que fazer com o e-mail de abertura de ciclo/arquivamento pra quem está no topo da hierarquia (sem gestor direto) — hoje recebe normalmente, já que também participa do Pulse (só não tem parecer). Se fizer sentido diferente, é um ajuste pontual.
+
 ### 5.16 Sprint 6 — parte 1: Autocadastro, Admin sem departamento, Reset gated e Manual do Usuário
 
 **Autocadastro público (pedido do Erick):** `POST /auth/register` — o funcionário cria a própria conta sem depender de admin/gestor. Escolhe livremente área e cargo (o `role` continua sendo derivado do cargo, nunca escolhido livremente, e nunca pode virar ADMIN por essa via). Dispara o e-mail de verificação automaticamente (fluxo que existia desde a Sprint 0, mas nunca tinha sido conectado a um cadastro real até agora). Rotas públicas novas (`/public/areas`, `/public/positions`, `/public/managers`) alimentam os selects do formulário antes da pessoa ter conta. Tela `/cadastro` (fora do layout autenticado) + link "Cadastre-se" na tela de login.

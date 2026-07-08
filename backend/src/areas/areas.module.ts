@@ -3,8 +3,9 @@ import { Injectable } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Audit } from '../common/decorators/audit.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole } from '@prisma/client';
+import { UserRole, AuditAction } from '@prisma/client';
 import { IsString, MinLength } from 'class-validator';
 import { Module } from '@nestjs/common';
 
@@ -43,18 +44,21 @@ class AreasController {
   }
 
   @Roles(UserRole.ADMIN)
+  @Audit(AuditAction.CADASTRO)
   @Post()
   create(@Body() dto: AreaDto) {
     return this.areasService.create(dto);
   }
 
   @Roles(UserRole.ADMIN)
+  @Audit(AuditAction.EDICAO)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: AreaDto) {
     return this.areasService.update(id, dto);
   }
 
   @Roles(UserRole.ADMIN)
+  @Audit(AuditAction.EXCLUSAO)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.areasService.remove(id);

@@ -13,8 +13,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { Audit } from '../common/decorators/audit.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { PulseCycleStatus, PulseEvaluationStatus, UserRole } from '@prisma/client';
+import { PulseCycleStatus, PulseEvaluationStatus, UserRole, AuditAction } from '@prisma/client';
 import { ArrayMinSize, IsArray, IsInt, IsString, Max, Min, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -189,6 +190,7 @@ class PulseFeedbacksController {
     return this.pulseFeedbacksService.findOne(id, req.user);
   }
 
+  @Audit(AuditAction.FEEDBACK)
   @Post(':id/answers')
   submitAnswers(@Param('id') id: string, @Body() dto: SubmitAnswersDto, @Req() req: { user: AuthUser }) {
     return this.pulseFeedbacksService.submitAnswers(id, dto, req.user);

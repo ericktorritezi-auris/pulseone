@@ -14,6 +14,16 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
   PENDENTE: { bg: '#FEE2E2', text: '#EF4444', label: 'Pendente' },
   ATIVO: { bg: '#D1FAE5', text: '#10B981', label: 'Ativo' },
   INATIVO: { bg: '#E2E8F0', text: '#64748B', label: 'Inativo' },
+  // Ações de auditoria (seção 25 do PRD)
+  LOGIN: { bg: '#D1FAE5', text: '#10B981', label: 'Login' },
+  LOGOUT: { bg: '#E2E8F0', text: '#64748B', label: 'Logout' },
+  CADASTRO: { bg: '#DBEAFE', text: '#2563EB', label: 'Cadastro' },
+  EDICAO: { bg: '#FEF3C7', text: '#F59E0B', label: 'Edição' },
+  EXCLUSAO: { bg: '#FEE2E2', text: '#EF4444', label: 'Exclusão' },
+  FEEDBACK: { bg: '#DBEAFE', text: '#2563EB', label: 'Feedback' },
+  FECHAMENTO: { bg: '#FEF3C7', text: '#F59E0B', label: 'Fechamento' },
+  GERACAO_IA: { bg: '#EDE9FE', text: '#7C3AED', label: 'Geração de IA' },
+  GERACAO_PDF: { bg: '#EDE9FE', text: '#7C3AED', label: 'Geração de PDF' },
 };
 
 export function StatusBadge({ status }: StatusBadgeProps) {

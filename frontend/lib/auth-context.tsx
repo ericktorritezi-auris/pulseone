@@ -47,6 +47,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
+    // Fire-and-forget: só pra registrar o LOGOUT em auditoria (PRD seção
+    // 25). Nunca deve bloquear nem impedir o logout local — se a chamada
+    // falhar (rede, token já expirado etc.), a pessoa sai do sistema mesmo
+    // assim, só sem esse registro específico.
+    api.post('/auth/logout').catch(() => {});
+
     clearToken();
     window.localStorage.removeItem(USER_STORAGE_KEY);
     setUser(null);

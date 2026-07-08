@@ -16,8 +16,9 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Audit } from '../common/decorators/audit.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { PulseEvaluationStatus, PulseEvaluationType, PulseReportStatus, UserRole } from '@prisma/client';
+import { PulseEvaluationStatus, PulseEvaluationType, PulseReportStatus, UserRole, AuditAction } from '@prisma/client';
 import { IsOptional, IsString, MinLength } from 'class-validator';
 import { AnthropicModule } from '../anthropic/anthropic.module';
 import { AnthropicService } from '../anthropic/anthropic.service';
@@ -39,7 +40,7 @@ class FinalizeDto {
 }
 
 @Injectable()
-class PulseReportsService {
+export class PulseReportsService {
   constructor(
     private prisma: PrismaService,
     private anthropic: AnthropicService,
@@ -166,6 +167,58 @@ class PulseReportsService {
     if (!report) throw new NotFoundException('Relatório não encontrado.');
     await this.assertCanAccessReport(report, requester);
 
+    // REGRA DE ANONIMATO (PRD seção 19): quem está vendo o PRÓPRIO relatório
+    // (o dono) vê colegas como "Colega 1/2/3" e liderados como "Liderado 1/2/3"
+    // — só o gestor direto aparece com nome real. Gestor/Admin veem todo
+    // mundo com nome real (precisam pra consolidar de verdade).
+    const viewingAsOwner = requester.id === report.ownerId && requester.role !== UserRole.ADMIN;
+
+    return this.buildReportDetail(report, viewingAsOwner);
+  }
+
+  /**
+   * Usado só pelo arquivamento automático de ciclo (PulseCyclesModule) pra
+   * montar o PDF final que vai por e-mail — sem checagem de permissão de
+   * usuário porque não existe um "requester" HTTP aqui (é uma ação em lote
+   * disparada internamente, já protegida por ser exclusiva do admin no
+   * @Roles(ADMIN) da rota de arquivar). Sempre monta como se fosse o
+   * próprio dono vendo (anonimato aplicado), já que é o PDF que essa
+   * pessoa recebe de verdade.
+   */
+  async getReportForArchiveEmail(id: string) {
+    const report = await this.prisma.pulseReport.findUnique({
+      where: { id },
+      include: {
+        owner: { select: { id: true, fullName: true, managerId: true, areaId: true, area: true, position: true } },
+        cycle: { select: { label: true, status: true } },
+        aiAnalysis: true,
+      },
+    });
+    if (!report) return null;
+    return this.buildReportDetail(report, true);
+  }
+
+  private async buildReportDetail(
+    report: {
+      id: string;
+      cycleId: string;
+      ownerId: string;
+      status: PulseReportStatus;
+      managerFinalOpinion: string | null;
+      finalizedAt: Date | null;
+      owner: {
+        id: string;
+        fullName: string;
+        managerId: string | null;
+        areaId: string | null;
+        area: { name: string } | null;
+        position: { name: string } | null;
+      };
+      cycle: { label: string; status: string };
+      aiAnalysis: unknown;
+    },
+    viewingAsOwner: boolean,
+  ) {
     const score = await this.prisma.pulseScore.findUnique({
       where: { cycleId_userId: { cycleId: report.cycleId, userId: report.ownerId } },
     });
@@ -175,12 +228,6 @@ class PulseReportsService {
       include: { evaluator: { select: { fullName: true } } },
       orderBy: { createdAt: 'asc' },
     });
-
-    // REGRA DE ANONIMATO (PRD seção 19): quem está vendo o PRÓPRIO relatório
-    // (o dono) vê colegas como "Colega 1/2/3" e liderados como "Liderado 1/2/3"
-    // — só o gestor direto aparece com nome real. Gestor/Admin veem todo
-    // mundo com nome real (precisam pra consolidar de verdade).
-    const viewingAsOwner = requester.id === report.ownerId && requester.role !== UserRole.ADMIN;
 
     let colegaCount = 0;
     let liderdadoCount = 0;
@@ -391,6 +438,7 @@ class PulseReportsController {
 
   // Reaproveita findOne() por completo — mesma checagem de permissão e
   // mesma regra de anonimato já aplicadas, só troca a saída de JSON pra PDF.
+  @Audit(AuditAction.GERACAO_PDF)
   @Get(':id/pdf')
   async getPdf(@Param('id') id: string, @Req() req: { user: AuthUser }, @Res() res: Response) {
     const report = await this.pulseReportsService.findOne(id, req.user);
@@ -407,6 +455,7 @@ class PulseReportsController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.GESTOR)
+  @Audit(AuditAction.GERACAO_IA)
   @Patch(':id/ai-analysis')
   generateAiAnalysis(@Param('id') id: string, @Req() req: { user: AuthUser }) {
     return this.pulseReportsService.generateAiAnalysis(id, req.user);
@@ -414,6 +463,7 @@ class PulseReportsController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.GESTOR)
+  @Audit(AuditAction.EDICAO)
   @Patch(':id/opinion')
   setOpinion(@Param('id') id: string, @Body() dto: SetOpinionDto, @Req() req: { user: AuthUser }) {
     return this.pulseReportsService.setOpinion(id, dto.opinion, req.user);
@@ -421,6 +471,7 @@ class PulseReportsController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.GESTOR)
+  @Audit(AuditAction.FECHAMENTO)
   @Patch(':id/finalize')
   finalize(@Param('id') id: string, @Body() dto: FinalizeDto, @Req() req: { user: AuthUser }) {
     return this.pulseReportsService.finalize(id, dto?.opinion, req.user);
@@ -431,5 +482,6 @@ class PulseReportsController {
   imports: [AnthropicModule],
   controllers: [PulseReportsController],
   providers: [PulseReportsService, PulseReportPdfService],
+  exports: [PulseReportsService, PulseReportPdfService],
 })
 export class PulseReportsModule {}

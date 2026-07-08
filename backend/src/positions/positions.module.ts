@@ -2,8 +2,9 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, Injectabl
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Audit } from '../common/decorators/audit.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole } from '@prisma/client';
+import { UserRole, AuditAction } from '@prisma/client';
 import { IsBoolean, IsString, MinLength } from 'class-validator';
 
 class PositionDto {
@@ -44,18 +45,21 @@ class PositionsController {
   }
 
   @Roles(UserRole.ADMIN)
+  @Audit(AuditAction.CADASTRO)
   @Post()
   create(@Body() dto: PositionDto) {
     return this.positionsService.create(dto);
   }
 
   @Roles(UserRole.ADMIN)
+  @Audit(AuditAction.EDICAO)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: PositionDto) {
     return this.positionsService.update(id, dto);
   }
 
   @Roles(UserRole.ADMIN)
+  @Audit(AuditAction.EXCLUSAO)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.positionsService.remove(id);
