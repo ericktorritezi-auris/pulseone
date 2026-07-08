@@ -634,7 +634,12 @@ O enum `PulseEvaluationType.GESTOR` (mão dupla, mesmo tipo pras duas direções
 - **Score/NPS/Evolução do colaborador conectados de verdade**: `dashboard/collaborator` deixou de retornar `null` fixo — calcula a partir de `PulseScore`, respeitando a mesma trava de liberação em lote por área (seção 5.12) usada no relatório completo. `/historico` ganhou gráfico de evolução (recharts, `LineChart`) quando há 2+ ciclos liberados.
 - **Dashboard do ADMIN**: `GET /dashboard/admin` — áreas, cargos, pessoas por área, pulsos cadastrados, pulso vigente, participação % e pendências do ciclo ativo. Nada de NPS/score, como combinado.
 - **Dashboard do GESTOR**: `GET /dashboard/manager` — score médio e NPS médio da equipe (liderados diretos, ciclo mais recente finalizado/arquivado), quantidade de membros + listagem com nomes e cargos. (Nota: como `managerId` exige mesma área do gestor — seção 5.7 —, o cenário "gestor de várias áreas" que o Erick mencionou não é possível na arquitetura atual; fica registrado caso vire um requisito real no futuro.)
-- **Pendente ainda nesta sprint**: Landing Page (isso é Sprint 6).
+**Sprint 6 — Landing Page + Auditoria + QA final ✅ (parte 2 — Landing Page concluída nesta rodada)**
+- **Landing Page pública** (`app/page.tsx`, seção 10 do PRD): visitante não-logado vê a página de verdade agora, em vez de ser redirecionado direto pro login. Usuário logado continua indo direto pro dashboard.
+  - **Elemento de assinatura**: anéis de pulso animados (`.pulse-ring`, CSS puro, respeita `prefers-reduced-motion`) ecoando o próprio símbolo da marca (círculo + pontos orbitais) — não é um efeito decorativo genérico, é uma extensão do logo aprovado pro contexto de hero.
+  - Seções: Hero (headline + CTA), O que é (papéis: Colaborador/Gestor/Admin), Benefícios (os 5 do design system, copy reaproveitada verbatim: Feedback 360°, Desenvolvimento contínuo, Decisões mais assertivas, Cultura de confiança, NPS da área), Como funciona (4 etapas reais do ciclo — sequência genuína, não numeração decorativa), CTA final, rodapé "Desenvolvido por BellePlanner".
+  - **Correção encontrada no processo**: a fonte Inter (mandatória no design system) nunca tinha sido carregada de verdade no projeto — só declarada no CSS, sem `@font-face`/`next/font`, caindo no sans-serif do sistema. Corrigido via `next/font/google` no `layout.tsx`.
+- **Pendente ainda**: Auditoria completa (ligar `AuditLog`/`AuditInterceptor` às ações reais do sistema) e QA final de fechamento.
 
 ### 5.16 Sprint 6 — parte 1: Autocadastro, Admin sem departamento, Reset gated e Manual do Usuário
 

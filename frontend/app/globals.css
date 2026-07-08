@@ -5,5 +5,33 @@
 body {
   background-color: #F8FAFC;
   color: #0F172A;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-inter), 'Inter', sans-serif;
+}
+
+/* Assinatura visual da Landing Page: anéis de pulso ecoando o símbolo da
+   marca (círculo + pontos orbitais). Três anéis, defasados, expandindo e
+   sumindo — como um pulso/batimento real, não um efeito decorativo solto. */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.55;
+  }
+  80% {
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.pulse-ring {
+  animation: pulse-ring 3.2s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-ring {
+    animation: none;
+    opacity: 0.18;
+  }
 }
