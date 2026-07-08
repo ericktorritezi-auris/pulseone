@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import puppeteer from 'puppeteer-core';
-import { execSync } from 'child_process';
+import puppeteer from 'puppeteer';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -61,25 +60,6 @@ const TIPO_LABELS: Record<string, string> = {
 @Injectable()
 export class PulseReportPdfService {
   private readonly logger = new Logger(PulseReportPdfService.name);
-
-  // Resolve o binário do Chromium instalado como pacote de sistema pelo
-  // Nixpacks (ver nixpacks.toml na raiz do repo) — evita de vez o problema
-  // de bibliotecas de sistema ausentes que o Chromium empacotado dentro do
-  // node_modules (puppeteer / @sparticuz/chromium) enfrentava no Railway.
-  private resolveChromiumPath(): string {
-    const candidates = ['chromium', 'chromium-browser', 'google-chrome-stable', 'google-chrome'];
-    for (const bin of candidates) {
-      try {
-        const path = execSync(`which ${bin}`, { encoding: 'utf-8' }).trim();
-        if (path) return path;
-      } catch {
-        // tenta o próximo candidato
-      }
-    }
-    throw new Error(
-      'Chromium não encontrado no sistema. Confirme que o nixpacks.toml (nixPkgs = ["chromium"]) foi aplicado no build do Railway.',
-    );
-  }
 
   buildHtml(report: ReportForPdf): string {
     const scoreColor = report.score ? SCORE_COLOR[report.score.scoreBand] ?? '#2563EB' : '#94A3B8';
@@ -168,14 +148,21 @@ export class PulseReportPdfService {
   }
 
   async generatePdf(html: string): Promise<Buffer> {
+    // Estratégia combinada, depois de vários diagnósticos em produção:
+    // - O Chromium do SISTEMA (instalado via apt, ver railpack.json) resolveu
+    //   as bibliotecas que faltavam (libnss3 etc.), mas o binário em si não é
+    //   garantidamente compatível com o protocolo que o Puppeteer espera —
+    //   causava um crash quase instantâneo (~100ms) sem mensagem clara.
+    // - Por isso usamos o "puppeteer" completo (não puppeteer-core): ele
+    //   baixa e usa o PRÓPRIO Chromium, testado e casado com essa versão
+    //   exata do Puppeteer — e já encontra as bibliotecas de sistema
+    //   instaladas pelo apt (elas são compartilhadas, não exclusivas do
+    //   Chromium do apt).
     let browser;
     const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chromium-pulseone-'));
 
     try {
-      const executablePath = this.resolveChromiumPath();
-
       browser = await puppeteer.launch({
-        executablePath,
         headless: true,
         timeout: 60_000, // ambiente com CPU limitada pode demorar mais que os 30s padrão
         dumpio: true, // ecoa a saída do Chromium em tempo real no log do servidor (diagnóstico)
