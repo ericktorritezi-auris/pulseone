@@ -727,6 +727,10 @@ Ao remover `@unique` do e-mail (seção 5.17), o `seed.ts` continuou usando `ups
 
 **Prevenção de UX (pedido do Erick):** editar o **próprio** cadastro (nome/e-mail/etc.) ou redefinir a **própria** senha (via a ação de admin) agora força um logout automático com aviso claro, em vez de deixar a sessão em cache com dados desatualizados no Topbar — foi exatamente essa "sensação de que nada mudou" que causou o incidente.
 
+**Atualização (resolvido):** a recuperação pontual nunca chegou a ser necessária de fato — o admin original tinha sido despromovido a `COLABORADOR` numa edição anterior (troca de cargo sem querer), então o próprio seed criou um admin novo com as credenciais padrão, e foi com ele que o Erick conseguiu entrar. `fix-admin-recovery.js` removido do `start.js` e do repositório — não tem mais função, e deixá-lo ligado poderia causar sobrescrita indesejada de credenciais num admin futuro.
+
+**Correção relacionada — formulário de edição exigia área/cargo até pro admin:** o formulário de editar pessoa tinha os campos Área e Cargo marcados como `required` incondicionalmente, mesmo quando a pessoa editada é o `ADMIN` (que estruturalmente não tem nenhum dos dois). Corrigido: `editingIsAdmin` (derivado de `person.role === 'ADMIN'` em `openEdit`) esconde esses campos e mostra uma nota explicativa, e o payload enviado ao backend não inclui `areaId`/`positionId`/`managerId` nesse caso — evita forçar uma seleção que não faz sentido pra essa conta.
+
 ### 5.15 Unificação de status do relatório (pedido do Erick)
 
 `PulseReportStatus.AGUARDANDO_IA` e `AGUARDANDO_PARECER` viraram um único valor: **`AGUARDANDO_FECHAMENTO`** — é o único status enquanto o gestor não finaliza a consolidação (gerar a análise de IA é uma etapa opcional dentro dele, não muda o status). Fluxo final: `EM_ANDAMENTO → AGUARDANDO_FECHAMENTO → FINALIZADO → ARQUIVADO`.

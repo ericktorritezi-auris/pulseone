@@ -28,6 +28,7 @@ export default function PessoasPage() {
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingIsAdmin, setEditingIsAdmin] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -82,6 +83,7 @@ export default function PessoasPage() {
 
   function openCreate() {
     setEditingId(null);
+    setEditingIsAdmin(false);
     setForm({ ...emptyForm, areaId: isGestor ? user!.areaId : '' });
     setError('');
     setDrawerOpen(true);
@@ -89,12 +91,13 @@ export default function PessoasPage() {
 
   function openEdit(person: Person) {
     setEditingId(person.id);
+    setEditingIsAdmin(person.role === 'ADMIN');
     setForm({
       fullName: person.fullName,
       email: person.email,
       phone: person.phone,
-      areaId: person.areaId,
-      positionId: person.positionId,
+      areaId: person.areaId ?? '',
+      positionId: person.positionId ?? '',
       managerId: person.managerId ?? '',
       password: '',
     });
@@ -114,9 +117,16 @@ export default function PessoasPage() {
           fullName: form.fullName,
           email: form.email,
           phone: form.phone,
-          positionId: form.positionId,
-          managerId: form.managerId || null,
-          ...(isGestor ? {} : { areaId: form.areaId }),
+          // Admin não tem área/cargo/gestor direto — não manda esses campos
+          // nesse caso, pra não forçar valor nenhum num cadastro que
+          // estruturalmente não tem (nem deve ter) essa vinculação.
+          ...(editingIsAdmin
+            ? {}
+            : {
+                positionId: form.positionId,
+                managerId: form.managerId || null,
+                ...(isGestor ? {} : { areaId: form.areaId }),
+              }),
           ...(masterPasswordOverride ? { masterPasswordOverride } : {}),
         });
       } else {
@@ -333,66 +343,76 @@ export default function PessoasPage() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-p-primary-dark mb-1">
-              Área {isGestor && <span className="text-xs text-p-neutral font-normal">(fixa — definida pelo seu perfil de gestor)</span>}
-            </label>
-            <select
-              required
-              disabled={isGestor}
-              value={isGestor ? user!.areaId : form.areaId}
-              onChange={(e) => setForm({ ...form, areaId: e.target.value, managerId: '' })}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-100 disabled:text-p-neutral"
-            >
-              <option value="">Selecione...</option>
-              {areas.map((area) => (
-                <option key={area.id} value={area.id}>
-                  {area.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-p-primary-dark mb-1">Cargo</label>
-            <select
-              required
-              value={form.positionId}
-              onChange={(e) => setForm({ ...form, positionId: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-            >
-              <option value="">Selecione...</option>
-              {positions.map((position) => (
-                <option key={position.id} value={position.id}>
-                  {position.name} {position.isManager && '(gestor)'}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-p-neutral mt-1">
-              O perfil de acesso (gestor/colaborador) é definido automaticamente pelo cargo escolhido.
+          {editingIsAdmin ? (
+            <p className="text-xs text-p-neutral bg-slate-50 border border-slate-200 rounded-lg p-3">
+              Esta conta é <b>administrador</b> — não pertence a nenhuma área ou cargo (é uma
+              entidade do sistema, não um colaborador da organização). Só é possível editar nome,
+              e-mail e telefone aqui.
             </p>
-          </div>
+          ) : (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-p-primary-dark mb-1">
+                  Área {isGestor && <span className="text-xs text-p-neutral font-normal">(fixa — definida pelo seu perfil de gestor)</span>}
+                </label>
+                <select
+                  required
+                  disabled={isGestor}
+                  value={isGestor ? user!.areaId ?? '' : form.areaId}
+                  onChange={(e) => setForm({ ...form, areaId: e.target.value, managerId: '' })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-100 disabled:text-p-neutral"
+                >
+                  <option value="">Selecione...</option>
+                  {areas.map((area) => (
+                    <option key={area.id} value={area.id}>
+                      {area.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-p-primary-dark mb-1">Gestor Direto</label>
-            <select
-              value={form.managerId}
-              onChange={(e) => setForm({ ...form, managerId: e.target.value })}
-              disabled={!effectiveAreaId}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-100"
-            >
-              <option value="">Nenhum (topo da hierarquia)</option>
-              {managers.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.fullName}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-p-neutral mt-1">
-              Quem avalia esta pessoa no ciclo Pulse e com quem ela forma o mesmo time imediato pra
-              avaliação de colegas. Deixe em branco se não houver ninguém acima dentro do sistema.
-            </p>
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-p-primary-dark mb-1">Cargo</label>
+                <select
+                  required
+                  value={form.positionId}
+                  onChange={(e) => setForm({ ...form, positionId: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                >
+                  <option value="">Selecione...</option>
+                  {positions.map((position) => (
+                    <option key={position.id} value={position.id}>
+                      {position.name} {position.isManager && '(gestor)'}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-p-neutral mt-1">
+                  O perfil de acesso (gestor/colaborador) é definido automaticamente pelo cargo escolhido.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-p-primary-dark mb-1">Gestor Direto</label>
+                <select
+                  value={form.managerId}
+                  onChange={(e) => setForm({ ...form, managerId: e.target.value })}
+                  disabled={!effectiveAreaId}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-100"
+                >
+                  <option value="">Nenhum (topo da hierarquia)</option>
+                  {managers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.fullName}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-p-neutral mt-1">
+                  Quem avalia esta pessoa no ciclo Pulse e com quem ela forma o mesmo time imediato pra
+                  avaliação de colegas. Deixe em branco se não houver ninguém acima dentro do sistema.
+                </p>
+              </div>
+            </>
+          )}
 
           {!editingId && (
             <div>
