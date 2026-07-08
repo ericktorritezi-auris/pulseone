@@ -27,24 +27,38 @@ async function main() {
 
   // Admin — seed obrigatório com troca de senha no 1º login. O admin NÃO
   // pertence a nenhuma área/cargo (é uma entidade do sistema, não um
-  // colaborador da organização) — pedido explícito do Erick. O "update"
-  // abaixo corrige retroativamente qualquer admin que já tenha sido criado
-  // com área/cargo (resíduo de quando esses campos eram obrigatórios).
+  // colaborador da organização) — pedido explícito do Erick.
+  //
+  // Não dá mais pra usar upsert({ where: { email } }) — o e-mail deixou de
+  // ser único no banco (seção 5.17: mesma pessoa pode ter mais de uma conta
+  // com o mesmo e-mail, ex: admin e gestor). Por isso o Prisma exige "id"
+  // (ou outro campo @unique) pra upsert. Aqui fazemos manualmente: procura
+  // por e-mail + role=ADMIN (combinação que identifica bem o admin seed) e
+  // decide entre criar ou atualizar.
   const passwordHash = await bcrypt.hash('Acesso@123', 10);
 
-  await prisma.user.upsert({
-    where: { email: 'admin@pulseone.app.br' },
-    update: { areaId: null, positionId: null },
-    create: {
-      fullName: 'Administrador PulseOne',
-      email: 'admin@pulseone.app.br',
-      emailVerified: true,
-      phone: '(00) 00000-0000',
-      passwordHash,
-      mustChangePwd: true,
-      role: UserRole.ADMIN,
-    },
+  const existingAdmin = await prisma.user.findFirst({
+    where: { email: 'admin@pulseone.app.br', role: UserRole.ADMIN },
   });
+
+  if (existingAdmin) {
+    await prisma.user.update({
+      where: { id: existingAdmin.id },
+      data: { areaId: null, positionId: null },
+    });
+  } else {
+    await prisma.user.create({
+      data: {
+        fullName: 'Administrador PulseOne',
+        email: 'admin@pulseone.app.br',
+        emailVerified: true,
+        phone: '(00) 00000-0000',
+        passwordHash,
+        mustChangePwd: true,
+        role: UserRole.ADMIN,
+      },
+    });
+  }
 
   // 5 perguntas oficiais do PRD (seção 17)
   const questions = [

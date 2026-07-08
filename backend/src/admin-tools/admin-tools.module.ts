@@ -24,6 +24,9 @@ const CONFIRMATION_PHRASE = 'CONFIRMO-APAGAR-TODOS-OS-DADOS-DE-TESTE';
 class ResetTestDataDto {
   @IsString()
   confirmationPhrase: string;
+
+  @IsString()
+  masterPassword: string;
 }
 
 @Injectable()
@@ -36,14 +39,28 @@ class AdminToolsService {
    * já que admin não pertence a nenhum departamento — e as 5 perguntas
    * oficiais do PRD (essas não são teste, são fixas do sistema).
    *
+   * Dupla trava (reforço pedido pelo Erick): exige a frase de confirmação
+   * exata **e** a senha MASTER (mesma variável de ambiente usada na
+   * liberação de e-mail duplicado — seção 5.17). As duas precisam bater;
+   * qualquer uma errada, ou a variável não configurada no servidor, e
+   * nada é apagado.
+   *
    * Ordem de exclusão respeita as dependências de chave estrangeira:
    * sempre filhos antes dos pais. Nunca é chamado automaticamente por
    * nenhum outro fluxo do sistema — só por essa rota, protegida por
-   * ADMIN + frase de confirmação exata.
+   * ADMIN + frase de confirmação + senha MASTER.
    */
-  async resetTestData(confirmationPhrase: string) {
+  async resetTestData(confirmationPhrase: string, masterPassword: string) {
     if (confirmationPhrase !== CONFIRMATION_PHRASE) {
       throw new ForbiddenException('Frase de confirmação incorreta. Nada foi apagado.');
+    }
+
+    const configuredMasterPassword = process.env.MASTER_PASSWORD;
+    if (!configuredMasterPassword) {
+      throw new ForbiddenException('Senha MASTER não está configurada no servidor. Nada foi apagado.');
+    }
+    if (masterPassword !== configuredMasterPassword) {
+      throw new ForbiddenException('Senha MASTER incorreta. Nada foi apagado.');
     }
 
     const counts = {
@@ -105,7 +122,7 @@ class AdminToolsController {
 
   @Post('reset-test-data')
   resetTestData(@Body() dto: ResetTestDataDto) {
-    return this.adminToolsService.resetTestData(dto.confirmationPhrase);
+    return this.adminToolsService.resetTestData(dto.confirmationPhrase, dto.masterPassword);
   }
 }
 

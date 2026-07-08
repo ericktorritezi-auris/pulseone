@@ -14,33 +14,44 @@ export default function ConfiguracoesPage() {
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState('');
 
+  const [masterModalOpen, setMasterModalOpen] = useState(false);
+  const [masterPasswordInput, setMasterPasswordInput] = useState('');
+  const [masterError, setMasterError] = useState('');
+
   if (user?.role !== 'ADMIN') {
     return <p className="text-sm text-p-neutral">Esta página é exclusiva do administrador.</p>;
   }
 
   const canConfirm = typedPhrase === REQUIRED_PHRASE;
 
-  async function handleReset() {
+  function openMasterModal() {
     if (!canConfirm) return;
-    if (
-      !confirm(
-        'Isso vai apagar PERMANENTEMENTE todos os dados de teste (pessoas, áreas, cargos, ciclos, feedbacks, relatórios) — restando só o(s) admin(s). Não tem como desfazer. Confirma mesmo?',
-      )
-    ) {
-      return;
-    }
+    setMasterPasswordInput('');
+    setMasterError('');
+    setMasterModalOpen(true);
+  }
+
+  async function handleConfirmReset() {
+    if (!masterPasswordInput.trim()) return;
 
     setSubmitting(true);
     setError('');
+    setMasterError('');
     setResult(null);
     try {
       const res = await api.post<{ mensagem: string }>('/admin-tools/reset-test-data', {
         confirmationPhrase: typedPhrase,
+        masterPassword: masterPasswordInput,
       });
       setResult(res.mensagem);
       setTypedPhrase('');
+      setMasterModalOpen(false);
+      setMasterPasswordInput('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao resetar.');
+      const message = err instanceof Error ? err.message : 'Erro ao resetar.';
+      // Mantém o modal aberto e mostra o erro ali — dupla trava (frase +
+      // senha MASTER) exige tentar de novo se qualquer uma estiver errada.
+      setMasterError(message);
     } finally {
       setSubmitting(false);
     }
@@ -77,13 +88,52 @@ export default function ConfiguracoesPage() {
         {result && <p className="text-sm text-p-success mb-3">{result}</p>}
 
         <button
-          onClick={handleReset}
-          disabled={!canConfirm || submitting}
+          onClick={openMasterModal}
+          disabled={!canConfirm}
           className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {submitting ? 'Apagando...' : 'Apagar todos os dados de teste'}
+          Apagar todos os dados de teste
         </button>
       </div>
+
+      {masterModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle size={18} className="text-red-600" />
+              <h3 className="text-base font-semibold text-red-600">Confirmação final</h3>
+            </div>
+            <p className="text-sm text-p-neutral mb-4">
+              Essa ação é <b>permanente e não pode ser desfeita</b>. Pra executar o reset, digite a
+              senha MASTER do sistema.
+            </p>
+            <input
+              type="password"
+              autoFocus
+              value={masterPasswordInput}
+              onChange={(e) => setMasterPasswordInput(e.target.value)}
+              placeholder="Senha MASTER"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-2"
+            />
+            {masterError && <p className="text-sm text-red-600 mb-2">{masterError}</p>}
+            <div className="flex gap-3 mt-3">
+              <button
+                onClick={() => setMasterModalOpen(false)}
+                className="flex-1 border border-slate-300 text-p-primary-dark py-2.5 rounded-lg text-sm font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmReset}
+                disabled={submitting || !masterPasswordInput.trim()}
+                className="flex-1 bg-red-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+              >
+                {submitting ? 'Apagando...' : 'Confirmar e apagar tudo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
