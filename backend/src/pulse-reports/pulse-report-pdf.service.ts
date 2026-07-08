@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import puppeteer from 'puppeteer-core';
 import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 interface ReportForPdf {
   status: string;
@@ -166,12 +169,17 @@ export class PulseReportPdfService {
 
   async generatePdf(html: string): Promise<Buffer> {
     let browser;
+    const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chromium-pulseone-'));
+
     try {
       const executablePath = this.resolveChromiumPath();
 
       browser = await puppeteer.launch({
         executablePath,
         headless: true,
+        timeout: 60_000, // ambiente com CPU limitada pode demorar mais que os 30s padrão
+        dumpio: true, // ecoa a saída do Chromium em tempo real no log do servidor (diagnóstico)
+        userDataDir: profileDir, // único por chamada — evita conflito entre PDFs gerados em paralelo
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -220,6 +228,7 @@ export class PulseReportPdfService {
       throw err;
     } finally {
       if (browser) await browser.close();
+      fs.rmSync(profileDir, { recursive: true, force: true });
     }
   }
 }
