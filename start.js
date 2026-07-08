@@ -34,6 +34,18 @@ try {
   process.exit(1);
 }
 
+// RECUPERAÇÃO PONTUAL DO ADMIN — só nesta rodada (ver fix-admin-recovery.js
+// pro contexto completo). Roda ANTES do seed de propósito: o seed
+// identifica o admin pelo role, então precisa encontrar o registro já
+// com o e-mail/senha corrigidos, sem risco de duplicar.
+// ⚠️ REMOVER esta chamada assim que o Erick confirmar que voltou a logar.
+console.log('Rodando recuperação pontual do admin...');
+try {
+  execSync('node prisma/fix-admin-recovery.js', { cwd: backendDir, stdio: 'inherit' });
+} catch (err) {
+  console.error('Falha na recuperação do admin (não impede o boot do resto do sistema).');
+}
+
 // Seed é idempotente (usa upsert em tudo), então é seguro rodar em todo boot.
 // Garante que o admin, as perguntas oficiais e os dados de exemplo sempre existam.
 console.log('Rodando seed (admin, perguntas oficiais, área/cargo de exemplo)...');

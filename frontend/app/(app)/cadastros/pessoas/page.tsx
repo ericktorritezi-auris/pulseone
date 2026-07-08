@@ -20,7 +20,7 @@ const emptyForm = {
 };
 
 export default function PessoasPage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [people, setPeople] = useState<Person[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -135,6 +135,17 @@ export default function PessoasPage() {
       }
       setDrawerOpen(false);
       setMasterModalOpen(false);
+
+      // Editou o PRÓPRIO cadastro (nome/e-mail/etc.)? Força um logout com
+      // aviso claro, em vez de deixar dados em cache desatualizados no
+      // Topbar/sessão — foi exatamente essa confusão que gerou o incidente
+      // com a conta do admin.
+      if (editingId && user && editingId === user.id) {
+        alert('Seus próprios dados foram atualizados. Você vai precisar entrar de novo.');
+        logout();
+        return;
+      }
+
       await loadData();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao salvar.';
@@ -181,6 +192,16 @@ export default function PessoasPage() {
     setAdminPasswordSuccess(false);
     try {
       await api.patch(`/users/${editingId}/password`, { newPassword: adminNewPassword });
+
+      // Redefiniu a PRÓPRIA senha por aqui? Mesmo cuidado: força relogin
+      // em vez de deixar a sessão atual seguir com token válido mas senha
+      // diferente da que a pessoa acabou de definir.
+      if (user && editingId === user.id) {
+        alert('Sua própria senha foi redefinida. Você vai precisar entrar de novo.');
+        logout();
+        return;
+      }
+
       setAdminPasswordSuccess(true);
       setAdminNewPassword('');
     } catch (err) {

@@ -717,6 +717,16 @@ O `puppeteer` "completo" baixa um Chromium que depende de várias bibliotecas de
 
 Ao remover `@unique` do e-mail (seção 5.17), o `seed.ts` continuou usando `upsert({ where: { email: '...' } })` pra criar/atualizar o admin — o Prisma exige um campo `@unique` (ou `id`) pra esse tipo de busca, e o e-mail deixou de servir. Isso travava o container em loop de crash logo no passo do seed. Corrigido: `findFirst({ where: { email, role: ADMIN } })` + `create`/`update` manual por `id`, em vez de `upsert` por e-mail.
 
+### 5.21 Incidente — admin travado após edição do próprio cadastro (correção pontual + prevenção)
+
+**O que aconteceu:** o Erick editou o próprio cadastro do admin (trocando e-mail pra igual ao do gestor, de teste) e preencheu a "Redefinir Senha" — mas clicou em **Salvar** (formulário principal) em vez de **Redefinir senha desta pessoa** (ação separada, de propósito, pra não misturar os dois envios). Resultado: o e-mail mudou, a senha não, e ele ficou sem saber com qual credencial entrar.
+
+**Recuperação pontual (execução única):** `backend/prisma/fix-admin-recovery.js`, chamado uma vez pelo `start.js` **antes** do seed, força o e-mail e a senha do admin de volta pros valores corretos direto no banco — não depende de conhecer a senha atual. ⚠️ Essa chamada precisa ser **removida do `start.js`** assim que o Erick confirmar que voltou a conseguir logar — senão resetaria o e-mail/senha do admin em todo deploy futuro, mesmo que ele troque essas credenciais de propósito depois.
+
+**Correção relacionada no seed:** o `seed.ts` identificava o admin pelo e-mail padrão (`admin@pulseone.app.br`) — se o e-mail fosse customizado (como o Erick fez, e é esperado que continue fazendo), o seed não encontraria o admin existente e criaria **um segundo do zero**. Corrigido: identifica o admin só pelo `role=ADMIN`, nunca mais pelo e-mail.
+
+**Prevenção de UX (pedido do Erick):** editar o **próprio** cadastro (nome/e-mail/etc.) ou redefinir a **própria** senha (via a ação de admin) agora força um logout automático com aviso claro, em vez de deixar a sessão em cache com dados desatualizados no Topbar — foi exatamente essa "sensação de que nada mudou" que causou o incidente.
+
 ### 5.15 Unificação de status do relatório (pedido do Erick)
 
 `PulseReportStatus.AGUARDANDO_IA` e `AGUARDANDO_PARECER` viraram um único valor: **`AGUARDANDO_FECHAMENTO`** — é o único status enquanto o gestor não finaliza a consolidação (gerar a análise de IA é uma etapa opcional dentro dele, não muda o status). Fluxo final: `EM_ANDAMENTO → AGUARDANDO_FECHAMENTO → FINALIZADO → ARQUIVADO`.

@@ -29,16 +29,13 @@ async function main() {
   // pertence a nenhuma área/cargo (é uma entidade do sistema, não um
   // colaborador da organização) — pedido explícito do Erick.
   //
-  // Não dá mais pra usar upsert({ where: { email } }) — o e-mail deixou de
-  // ser único no banco (seção 5.17: mesma pessoa pode ter mais de uma conta
-  // com o mesmo e-mail, ex: admin e gestor). Por isso o Prisma exige "id"
-  // (ou outro campo @unique) pra upsert. Aqui fazemos manualmente: procura
-  // por e-mail + role=ADMIN (combinação que identifica bem o admin seed) e
-  // decide entre criar ou atualizar.
+  // Identifica o admin pelo ROLE, não pelo e-mail — se o Erick customizar
+  // o e-mail do admin (o que é esperado e correto fazer), o seed continua
+  // reconhecendo que já existe um admin e não cria um segundo do zero.
   const passwordHash = await bcrypt.hash('Acesso@123', 10);
 
   const existingAdmin = await prisma.user.findFirst({
-    where: { email: 'admin@pulseone.app.br', role: UserRole.ADMIN },
+    where: { role: UserRole.ADMIN },
   });
 
   if (existingAdmin) {
