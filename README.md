@@ -91,7 +91,7 @@ Backend (NestJS) e frontend (Next.js) rodam **no mesmo serviço Railway**, dentr
 **Configuração no Railway:**
 - Root Directory: raiz do repositório (não usar `backend` nem `frontend` isoladamente).
 - Build Command: `npm run build`
-- `nixpacks.toml` (raiz do repo) instala o Chromium como pacote de sistema durante o build — necessário pra geração de PDF (Puppeteer). Não precisa configurar nada manualmente no Railway; o Nixpacks lê esse arquivo sozinho.
+- `railpack.json` (raiz do repo) instala o Chromium como pacote `apt` no ambiente de execução — necessário pra geração de PDF (Puppeteer). O Railway usa o builder **Railpack** (sucessor do Nixpacks); não precisa configurar nada manualmente, o Railpack lê esse arquivo sozinho.
 - Start Command: `npm start`
 - Variáveis: ver `.env.example` na raiz — é o conjunto único a preencher neste serviço.
 
