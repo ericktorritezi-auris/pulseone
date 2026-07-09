@@ -734,6 +734,12 @@ Nenhuma dessas é conceitualmente nova — são os mesmos pontos que ficaram de 
 
 **Migração `fix-gestor-areas.js` removida** do `start.js` e apagada do repositório — confirmada pelo teste do Erick.
 
+### 5.29 Diagnóstico — e-mails não disparavam (`RESEND_FROM_EMAIL` faltando)
+
+Confirmado com o Erick: `RESEND_API_KEY` estava configurada no Railway, mas `RESEND_FROM_EMAIL` não. O `ResendService` só checava a API key no boot — sem remetente, o Resend rejeita o envio (campo `from` vazio), e isso ficava **silencioso**, só aparecendo como um erro genérico dentro do `catch` de quem chamou (sem ficar claro qual era a causa real).
+
+**Correção:** o construtor agora também checa `RESEND_FROM_EMAIL` — se estiver faltando, desativa o envio (mesmo padrão já usado pra API key ausente) e loga um aviso específico e claro no boot, deixando óbvio qual variável falta. Nenhuma mudança de comportamento pro Erick além de configurar a variável que faltava no Railway.
+
 ### 5.16 Sprint 6 — parte 1: Autocadastro, Admin sem departamento, Reset gated e Manual do Usuário
 
 **Autocadastro público (pedido do Erick):** `POST /auth/register` — o funcionário cria a própria conta sem depender de admin/gestor. Escolhe livremente área e cargo (o `role` continua sendo derivado do cargo, nunca escolhido livremente, e nunca pode virar ADMIN por essa via). Dispara o e-mail de verificação automaticamente (fluxo que existia desde a Sprint 0, mas nunca tinha sido conectado a um cadastro real até agora). Rotas públicas novas (`/public/areas`, `/public/positions`, `/public/managers`) alimentam os selects do formulário antes da pessoa ter conta. Tela `/cadastro` (fora do layout autenticado) + link "Cadastre-se" na tela de login.

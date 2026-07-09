@@ -5,10 +5,12 @@ import { Resend } from 'resend';
 export class ResendService {
   private readonly logger = new Logger(ResendService.name);
   private resend: Resend | null = null;
-  private from = process.env.RESEND_FROM_EMAIL as string;
+  private from = '';
 
   constructor() {
     const apiKey = process.env.RESEND_API_KEY;
+    const fromEmail = process.env.RESEND_FROM_EMAIL;
+
     if (!apiKey) {
       // Não derruba a aplicação: e-mail é uma dependência externa, não deve
       // impedir o boot do sistema inteiro. Apenas loga e desativa o envio.
@@ -17,6 +19,18 @@ export class ResendService {
       );
       return;
     }
+
+    if (!fromEmail) {
+      // Mesmo com a API key certa, sem remetente o Resend rejeita o envio
+      // (from vazio) — e isso ficava silencioso antes, só aparecendo como
+      // erro genérico no catch de quem chamou. Agora fica claro na hora do boot.
+      this.logger.warn(
+        'RESEND_FROM_EMAIL não configurada. Envio de e-mails está desativado mesmo com a API key presente — o Resend exige um remetente de domínio verificado.',
+      );
+      return;
+    }
+
+    this.from = fromEmail;
     this.resend = new Resend(apiKey);
   }
 
