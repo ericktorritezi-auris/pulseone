@@ -13,6 +13,8 @@ import {
   Settings,
   KeyRound,
   UserPlus,
+  ScrollText,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../../lib/auth-context';
 import { ManualSection, MockScreen } from '../../../components/shared/ManualSection';
@@ -39,10 +41,10 @@ export default function ManualPage() {
           </p>
           <MockScreen label="tela de login" />
           <p>
-            <b>Primeiro acesso como administrador?</b> O sistema vai te pedir pra trocar a senha
-            antes de continuar — é só digitar a senha atual, escolher uma nova (mínimo 8
-            caracteres, com 1 letra maiúscula e 1 caractere especial, tipo <code>!</code> ou{' '}
-            <code>@</code>) e confirmar.
+            <b>Primeiro acesso, ou senha definida por um admin/gestor?</b> O sistema vai te pedir
+            pra trocar a senha antes de continuar — é só digitar a senha atual, escolher uma nova
+            (mínimo 8 caracteres, com 1 letra maiúscula e 1 caractere especial, tipo <code>!</code>{' '}
+            ou <code>@</code>) e confirmar.
           </p>
         </ManualSection>
 
@@ -70,11 +72,19 @@ export default function ManualPage() {
         </ManualSection>
 
         <ManualSection icon={LayoutDashboard} title="Meu Painel (Dashboard)">
-          <p>É a primeira tela que você vê depois de entrar. Nela você encontra, de forma resumida:</p>
+          <p>É a primeira tela que você vê depois de entrar. O que aparece muda de acordo com quem você é:</p>
           <ul className="list-disc list-inside space-y-1 pl-2">
-            <li>Seu score atual (nota geral), quando já existir um ciclo de avaliação concluído.</li>
-            <li>Se existe um ciclo de avaliação (Pulse) aberto agora, e quantas avaliações faltam você fazer.</li>
-            <li>Os últimos feedbacks que você recebeu e enviou.</li>
+            <li><b>Colaborador:</b> seu score atual, o ciclo aberto (se houver) e quantas avaliações faltam, e os últimos feedbacks recebidos/enviados.</li>
+            <li>
+              <b>Gestor:</b> tudo isso, mais um resumo <b>por área</b> — se você atua em mais de uma
+              área, cada uma aparece separada, com quantidade de colaboradores, score médio e NPS
+              médio próprios. Tem também um painel de "como cada área te avaliou" (informativo — seu
+              score oficial continua sendo um número único).
+            </li>
+            <li>
+              <b>Admin:</b> um resumo geral do sistema — áreas, cargos e pulsos cadastrados, o pulso
+              vigente, participação e pendências. Sem NPS/score aqui (isso é papel do gestor).
+            </li>
           </ul>
           <MockScreen label="dashboard" />
         </ManualSection>
@@ -83,7 +93,8 @@ export default function ManualPage() {
           <p>
             Feedback contínuo é diferente da avaliação oficial (Pulse) — você pode mandar um
             elogio, sugestão ou observação pra qualquer colega, a qualquer momento, sem precisar de
-            um ciclo aberto.
+            um ciclo aberto. (Essa opção não aparece pro admin — ele não participa de feedback
+            contínuo, só administra o sistema.)
           </p>
           <ol className="list-decimal list-inside space-y-1 pl-2">
             <li>Clique em <b>Enviar Feedback</b> (no painel ou no menu lateral).</li>
@@ -96,15 +107,16 @@ export default function ManualPage() {
 
         <ManualSection icon={Activity} title="Feedback Pulse — respondendo minhas avaliações">
           <p>
-            Quando o administrador abre um novo ciclo de avaliação, você recebe uma notificação e
-            vê suas tarefas em <b>Feedback Pulse</b>, no menu lateral. Elas podem ser de até 4
-            tipos, dependendo do seu cargo:
+            Quando o administrador abre um novo ciclo de avaliação, você recebe uma notificação
+            dentro do sistema <b>e também um e-mail</b> avisando que o ciclo está aberto e quantas
+            avaliações você tem pendentes. Suas tarefas ficam em <b>Feedback Pulse</b>, no menu
+            lateral. Elas podem ser de até 4 tipos, dependendo do seu cargo:
           </p>
           <ul className="list-disc list-inside space-y-1 pl-2">
-            <li><b>Minha Autoavaliação</b> — você avalia a si mesmo.</li>
-            <li><b>Avaliação de Colegas</b> — você avalia quem trabalha diretamente com você (mesmo gestor que você).</li>
+            <li><b>Minha Autoavaliação</b> — você avalia a si mesmo. Só uma, mesmo que você seja gestor de várias áreas.</li>
+            <li><b>Avaliação de Colegas</b> — você avalia quem trabalha diretamente com você (mesmo gestor que você, mesma área).</li>
             <li><b>Avaliação do Gestor Direto</b> — se você tiver um gestor direto, você avalia ele.</li>
-            <li><b>Avaliação da Equipe</b> — só aparece se você for gestor de alguém: você avalia cada liderado seu.</li>
+            <li><b>Avaliação da Equipe</b> — só aparece se você for gestor de alguém: você avalia cada liderado seu, mesmo que ele esteja em outra área que você também gerencia.</li>
           </ul>
           <MockScreen label="lista de avaliações pendentes" />
           <p>Pra responder uma avaliação:</p>
@@ -136,15 +148,25 @@ export default function ManualPage() {
           <p>
             Isso existe de propósito: ninguém vê o próprio resultado antes dos outros da mesma
             área, pra ser justo com todo mundo. Quando estiver liberado, clique no ciclo pra ver seu
-            score, o que colegas e gestor disseram (nomes de colegas aparecem como "Colega 1",
-            "Colega 2" etc., pra manter o anonimato) e o parecer final.
+            score, o que colegas e gestor disseram (nomes de colegas e liderados aparecem como
+            "Colega 1", "Liderado 1" etc., pra manter o anonimato) e o parecer final. Se você está
+            no topo da hierarquia (sem gestor acima), não existe parecer — você só vê o que o time
+            disse, e o relatório libera assim que a área terminar.
+          </p>
+          <p>
+            Quando um ciclo é <b>arquivado</b> pelo administrador, você também recebe um e-mail com
+            o PDF do seu relatório final em anexo — é o seu registro pra guardar.
           </p>
         </ManualSection>
 
         <ManualSection icon={User} title="Meu Perfil">
           <p>
-            Mostra seus dados básicos: nome, e-mail, área, cargo e seu nível de acesso no sistema
-            (colaborador, gestor ou administrador).
+            Mostra seus dados básicos: nome, e-mail, área, cargo (se você tiver — admin não tem
+            nenhum dos dois) e seu nível de acesso no sistema.
+          </p>
+          <p>
+            Também é aqui que você <b>troca a própria senha</b> — precisa digitar a senha atual e
+            escolher uma nova. Isso vale pra qualquer pessoa, incluindo admin.
           </p>
         </ManualSection>
 
@@ -152,24 +174,47 @@ export default function ManualPage() {
 
         {(user.role === 'GESTOR' || user.role === 'ADMIN') && (
           <>
-            <ManualSection icon={Users} title="Cadastrar Pessoas (Gestor)" subtitle="Só pra quem é gestor ou admin">
-              <p>Como gestor, você pode cadastrar novas pessoas — mas só dentro da sua própria área:</p>
+            <ManualSection icon={Users} title="Cadastrar Pessoas" subtitle="Gestor e Admin">
+              <p>
+                Vá em <b>Pessoas</b>, no menu lateral, e clique em <b>Cadastrar Pessoa</b>. A lista
+                mostra todo mundo das áreas em que você atua — se você é gestor de mais de uma área,
+                aparece gente de todas elas juntas, não só de uma.
+              </p>
               <ol className="list-decimal list-inside space-y-1 pl-2">
-                <li>Vá em <b>Pessoas</b>, no menu lateral.</li>
-                <li>Clique em <b>Cadastrar Pessoa</b>.</li>
                 <li>Preencha nome, e-mail, telefone.</li>
-                <li>A área já vem travada com a sua (você não escolhe outra).</li>
-                <li>Escolha o cargo — se o cargo for de gestão, a pessoa já vira gestora automaticamente.</li>
+                <li>
+                  Escolha a <b>Área</b> principal da pessoa (gestor só escolhe entre as áreas em que
+                  ele mesmo atua).
+                </li>
+                <li>
+                  Escolha o <b>Cargo</b> (a lista já filtra pelos cargos daquela área) — se o cargo
+                  for de gestão, a pessoa já vira gestora automaticamente.
+                </li>
+                <li>
+                  <b>Se o cargo escolhido for de gestão</b>, aparece um campo extra: "Outras áreas de
+                  atuação" — marque ali as demais áreas que essa pessoa também vai gerenciar, além da
+                  principal. Um gestor pode atuar em quantas áreas forem necessárias.
+                </li>
                 <li>Se quiser, indique quem é o gestor direto dela.</li>
                 <li>Defina uma senha inicial e salve.</li>
               </ol>
+              <p>
+                <b>E-mail já cadastrado?</b> Pode acontecer da mesma pessoa precisar de duas contas
+                (ex: é admin e também gestor de uma área) — nesse caso aparece um aviso pedindo a
+                senha MASTER do sistema. Sem ela, o cadastro é bloqueado e pede um e-mail diferente.
+              </p>
+              <p>
+                <b>Reativar alguém:</b> uma pessoa inativada continua na lista, com um botão de
+                reativar no lugar do de excluir — o histórico dela nunca é apagado.
+              </p>
             </ManualSection>
 
             <ManualSection icon={Users} title="Avaliação do Time" subtitle="Acompanhando o progresso da sua equipe">
               <p>
                 Durante um ciclo aberto, essa tela mostra o percentual de conclusão de cada pessoa
-                da sua equipe — quem já terminou as avaliações e quem ainda está devendo. Você não
-                vê o conteúdo das respostas aqui, só o progresso, pra saber quem cobrar.
+                das áreas em que você atua — quem já terminou as avaliações e quem ainda está
+                devendo. Você não vê o conteúdo das respostas aqui, só o progresso, pra saber quem
+                cobrar.
               </p>
               <MockScreen label="progresso da equipe" />
             </ManualSection>
@@ -209,9 +254,32 @@ export default function ManualPage() {
             <ManualSection icon={Users} title="Áreas e Cargos" subtitle="Estrutura organizacional">
               <p>
                 Antes de cadastrar pessoas, é preciso ter pelo menos uma <b>Área</b> (departamento,
-                ex: Marketing, Vendas) e um <b>Cargo</b> criados. Em Cargos, marque "é gestor" pros
-                cargos de liderança — isso é o que define automaticamente quem vira gestor no
-                sistema.
+                ex: Marketing, Vendas) criada. Todo <b>Cargo</b> pertence a uma área específica — ao
+                criar um cargo, escolha primeiro a área, depois marque "é gestor" pros cargos de
+                liderança (isso é o que define automaticamente quem vira gestor no sistema).
+              </p>
+            </ManualSection>
+
+            <ManualSection icon={ShieldCheck} title="Criando outro Admin">
+              <p>
+                Na tela de <b>Cadastrar Pessoa</b>, aparece um checkbox exclusivo do admin: "Esta
+                pessoa é administradora do sistema". Marcando, some Área/Cargo/Gestor Direto — admin
+                não pertence a nenhum dos três.
+              </p>
+              <p>
+                <b>Importante:</b> ninguém é promovido a admin depois de já cadastrado — só é
+                possível marcar essa opção na hora da criação. Se precisar, admin também pode
+                inativar ou reativar o cadastro de outro admin (gestor não tem esse acesso).
+              </p>
+            </ManualSection>
+
+            <ManualSection icon={KeyRound} title="Redefinir a senha de alguém">
+              <p>
+                Editando o cadastro de qualquer pessoa (Pessoas → ícone de lápis), existe uma seção
+                separada, só pra admin, chamada <b>Redefinir Senha</b> — diferente de "Alterar
+                Senha" (que cada um faz pra si mesmo em Meu Perfil), aqui o admin define uma senha
+                nova sem precisar saber a antiga. A pessoa é obrigada a trocar essa senha no próximo
+                login.
               </p>
             </ManualSection>
 
@@ -219,7 +287,10 @@ export default function ManualPage() {
               <p>É aqui que você controla o calendário de avaliações da empresa inteira:</p>
               <ol className="list-decimal list-inside space-y-1 pl-2">
                 <li>Clique em <b>Novo Ciclo</b>, dê um nome (ex: "Pulse Julho/2026").</li>
-                <li>Clique em <b>Abrir Ciclo</b> — isso gera automaticamente todas as avaliações de todo mundo.</li>
+                <li>
+                  Clique em <b>Abrir Ciclo</b> — isso gera automaticamente todas as avaliações de
+                  todo mundo <b>e dispara um e-mail</b> pra cada pessoa com avaliação pendente.
+                </li>
                 <li>Acompanhe o progresso clicando em <b>Ver Progresso</b>.</li>
                 <li>Quando achar que já deu tempo suficiente, clique em <b>Encerrar Ciclo</b>.</li>
                 <li>Clique em <b>Consolidar</b> — isso calcula o score de cada pessoa.</li>
@@ -230,6 +301,10 @@ export default function ManualPage() {
                 <li>
                   Quando 100% dos relatórios estiverem prontos, clique em <b>Finalizar Ciclo</b> —
                   esse é o fechamento definitivo.
+                </li>
+                <li>
+                  Por fim, <b>Arquivar</b> — isso gera e manda por e-mail o PDF final de cada pessoa,
+                  automaticamente.
                 </li>
               </ol>
               <MockScreen label="ciclos pulse" />
@@ -243,13 +318,23 @@ export default function ManualPage() {
               </p>
             </ManualSection>
 
+            <ManualSection icon={ScrollText} title="Auditoria">
+              <p>
+                Registro de tudo que acontece no sistema — quem fez o quê e quando: login, logout,
+                cadastros, edições, exclusões, feedbacks, fechamentos de ciclo, geração de IA e de
+                PDF. Dá pra filtrar por tipo de ação.
+              </p>
+            </ManualSection>
+
             <ManualSection icon={Settings} title="Configurações" subtitle="Zona de Perigo">
               <p>
                 Tem uma área ali chamada <b>Zona de Perigo</b>, que apaga todos os dados de teste do
-                sistema (pessoas, áreas, ciclos, feedbacks) — deixando só o cadastro de
-                administrador. Use isso <b>só</b> quando terminar todos os testes e estiver pronto
-                pra começar a usar o sistema de verdade, com dados reais. Ela pede uma frase de
-                confirmação digitada exatamente, de propósito — pra ninguém apagar tudo sem querer.
+                sistema (pessoas, áreas, cargos, ciclos, feedbacks) — deixando só o(s) cadastro(s)
+                de administrador que estiverem <b>ativos</b> no momento (admin inativado é apagado
+                junto com o resto). Use isso <b>só</b> quando terminar todos os testes e estiver
+                pronto pra começar a usar o sistema de verdade, com dados reais. Ela pede a frase de
+                confirmação exata <b>e</b> a senha MASTER — as duas precisam bater, de propósito,
+                pra ninguém apagar tudo sem querer.
               </p>
             </ManualSection>
           </>
