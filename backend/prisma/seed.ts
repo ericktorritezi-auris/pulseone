@@ -4,29 +4,6 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
-  // Áreas
-  const marketing = await prisma.area.upsert({
-    where: { name: 'Marketing' },
-    update: {},
-    create: { name: 'Marketing' },
-  });
-
-  // Cargos — ao menos um isManager=true por área para validar a
-  // resolução dinâmica de gestor (Area + Position.isManager). Cargo agora
-  // pertence a uma área (Position.areaId obrigatório) — a chave única
-  // passou a ser o par (name, areaId), não mais só o nome sozinho.
-  const gerenteMarketing = await prisma.position.upsert({
-    where: { name_areaId: { name: 'Gerente de Marketing', areaId: marketing.id } },
-    update: {},
-    create: { name: 'Gerente de Marketing', isManager: true, areaId: marketing.id },
-  });
-
-  const analistaMarketing = await prisma.position.upsert({
-    where: { name_areaId: { name: 'Analista de Marketing', areaId: marketing.id } },
-    update: {},
-    create: { name: 'Analista de Marketing', isManager: false, areaId: marketing.id },
-  });
-
   // Admin — seed obrigatório com troca de senha no 1º login. O admin NÃO
   // pertence a nenhuma área/cargo (é uma entidade do sistema, não um
   // colaborador da organização) — pedido explícito do Erick.
@@ -34,6 +11,13 @@ async function main() {
   // Identifica o admin pelo ROLE, não pelo e-mail — se o Erick customizar
   // o e-mail do admin (o que é esperado e correto fazer), o seed continua
   // reconhecendo que já existe um admin e não cria um segundo do zero.
+  //
+  // NÃO recria área/cargo de exemplo (removido de propósito): isso fazia
+  // sentido durante os testes, mas depois do reset pra produção de
+  // verdade, o seed ficava recriando "Marketing" e os 2 cargos de exemplo
+  // em todo boot — atrapalhando o Erick, que queria a base realmente
+  // limpa. O seed agora só garante o mínimo indispensável pro sistema
+  // funcionar: um admin, e as 5 perguntas oficiais.
   const passwordHash = await bcrypt.hash('Acesso@123', 10);
 
   const existingAdmin = await prisma.user.findFirst({
@@ -100,7 +84,7 @@ async function main() {
     }
   }
 
-  console.log('Seed concluído: admin, áreas, cargos e perguntas oficiais.');
+  console.log('Seed concluído: admin garantido, perguntas oficiais garantidas.');
 }
 
 main()
