@@ -18,6 +18,7 @@ const emptyForm = {
   managerId: '',
   password: '',
   asAdmin: false,
+  managedAreaIds: [] as string[],
 };
 
 export default function PessoasPage() {
@@ -46,6 +47,7 @@ export default function PessoasPage() {
   // própria área. O campo vem travado e pré-preenchido; admin escolhe livremente.
   const isGestor = user?.role === 'GESTOR';
   const effectiveAreaId = isGestor ? user!.areaId : form.areaId;
+  const selectedPositionIsManager = positions.find((p) => p.id === form.positionId)?.isManager ?? false;
 
   async function loadData() {
     setLoading(true);
@@ -114,6 +116,7 @@ export default function PessoasPage() {
       managerId: person.managerId ?? '',
       password: '',
       asAdmin: false,
+      managedAreaIds: (person.managedAreas ?? []).map((a) => a.id).filter((id) => id !== person.areaId),
     });
     setError('');
     setAdminNewPassword('');
@@ -140,6 +143,7 @@ export default function PessoasPage() {
                 positionId: form.positionId,
                 managerId: form.managerId || null,
                 ...(isGestor ? {} : { areaId: form.areaId }),
+                ...(selectedPositionIsManager ? { managedAreaIds: form.managedAreaIds } : {}),
               }),
           ...(masterPasswordOverride ? { masterPasswordOverride } : {}),
         });
@@ -157,6 +161,7 @@ export default function PessoasPage() {
                 // Se for gestor, o backend ignora isso de qualquer forma e usa
                 // a própria área — mandamos mesmo assim por clareza no payload.
                 areaId: isGestor ? user!.areaId : form.areaId,
+                ...(selectedPositionIsManager ? { managedAreaIds: form.managedAreaIds } : {}),
               }),
           ...(masterPasswordOverride ? { masterPasswordOverride } : {}),
         });
@@ -412,7 +417,7 @@ export default function PessoasPage() {
                 <select
                   required
                   value={form.positionId}
-                  onChange={(e) => setForm({ ...form, positionId: e.target.value })}
+                  onChange={(e) => setForm({ ...form, positionId: e.target.value, managedAreaIds: [] })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                 >
                   <option value="">Selecione...</option>
@@ -426,6 +431,38 @@ export default function PessoasPage() {
                   O perfil de acesso (gestor/colaborador) é definido automaticamente pelo cargo escolhido.
                 </p>
               </div>
+
+              {selectedPositionIsManager && (
+                <div>
+                  <label className="block text-sm font-medium text-p-primary-dark mb-2">
+                    Outras áreas de atuação (opcional)
+                  </label>
+                  <p className="text-xs text-p-neutral mb-2">
+                    Um gestor pode atuar em mais de uma área. A área principal ({areas.find((a) => a.id === effectiveAreaId)?.name ?? '—'}) já está incluída — marque aqui só as áreas ADICIONAIS.
+                  </p>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-3">
+                    {areas
+                      .filter((a) => a.id !== effectiveAreaId)
+                      .map((a) => (
+                        <label key={a.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={form.managedAreaIds.includes(a.id)}
+                            onChange={(e) =>
+                              setForm({
+                                ...form,
+                                managedAreaIds: e.target.checked
+                                  ? [...form.managedAreaIds, a.id]
+                                  : form.managedAreaIds.filter((id) => id !== a.id),
+                              })
+                            }
+                          />
+                          {a.name}
+                        </label>
+                      ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-p-primary-dark mb-1">Gestor Direto</label>

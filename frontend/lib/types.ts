@@ -47,6 +47,7 @@ export interface Person {
   position: Position | null;
   managerId: string | null;
   manager: ManagerOption | null;
+  managedAreas?: { id: string }[];
 }
 
 export interface Feedback {

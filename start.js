@@ -24,12 +24,6 @@ try {
   // existem linhas usando o valor removido.
   execSync('node prisma/fix-legacy-enum.js', { cwd: backendDir, stdio: 'inherit' });
 
-  // MIGRAÇÃO PONTUAL (pedido do Erick): vincula todos os cargos existentes
-  // à área Marketing, já que Position.areaId virou obrigatório.
-  // ⚠️ REMOVER esta chamada assim que o Erick confirmar que os cargos
-  // aparecem certos na tela de Cargos — não precisa rodar de novo depois.
-  execSync('node prisma/fix-position-area.js', { cwd: backendDir, stdio: 'inherit' });
-
   execSync('npx prisma db push --accept-data-loss --skip-generate', {
     cwd: backendDir,
     stdio: 'inherit',
@@ -38,6 +32,19 @@ try {
 } catch (err) {
   console.error('Falha ao sincronizar o schema do banco. Encerrando o serviço.');
   process.exit(1);
+}
+
+// MIGRAÇÃO PONTUAL (pedido do Erick): vincula todo gestor existente a
+// TODAS as áreas do sistema (gestor pode atuar em mais de uma área).
+// Roda DEPOIS do db push (tabela de junção nova, sem dado legado — não
+// precisa da mesma proteção via SQL bruto do fix-legacy-enum).
+// ⚠️ REMOVER esta chamada assim que o Erick confirmar que os gestores
+// aparecem vinculados a todas as áreas — é um "grant" de uma vez só.
+console.log('Vinculando gestores existentes a todas as áreas...');
+try {
+  execSync('node prisma/fix-gestor-areas.js', { cwd: backendDir, stdio: 'inherit' });
+} catch (err) {
+  console.error('Falha no vínculo gestor↔área (não impede o boot do resto do sistema).');
 }
 
 // Seed é idempotente (usa upsert em tudo), então é seguro rodar em todo boot.

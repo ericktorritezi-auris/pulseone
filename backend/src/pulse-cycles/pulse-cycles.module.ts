@@ -71,6 +71,17 @@ class PulseAssignmentService {
       include: { users: { where: { active: true, role: { not: UserRole.ADMIN } } } },
     });
 
+    // Busca GLOBAL (todas as áreas de uma vez), pra resolver o gestor de
+    // qualquer pessoa mesmo quando esse gestor atua em outra área (pedido
+    // do Erick: gestor pode gerenciar mais de uma área). Sem isso, a busca
+    // ficava presa à lista de membros da MESMA área da pessoa, e o gestor
+    // "de fora" nunca era encontrado — a avaliação hierárquica simplesmente
+    // não era gerada, silenciosamente.
+    const allActiveUsers = await this.prisma.user.findMany({
+      where: { active: true, role: { not: UserRole.ADMIN } },
+    });
+    const usersById = new Map(allActiveUsers.map((u) => [u.id, u]));
+
     const feedbacksToCreate: {
       cycleId: string;
       evaluatorId: string;
@@ -99,11 +110,14 @@ class PulseAssignmentService {
       // direto (AVALIACAO_EQUIPE — "Avaliação da Equipe") e cada liderado
       // avalia de volta o próprio gestor direto (AVALIACAO_GESTOR —
       // "Avaliação do Gestor Direto"). O PulseScoreService soma as duas no
-      // mesmo balde de managerScore de quem é avaliado.
+      // mesmo balde de managerScore de quem é avaliado. Busca o gestor na
+      // lista GLOBAL (usersById), não só nos membros desta área — um
+      // gestor pode ter a área principal em outro lugar e ainda assim
+      // gerenciar gente aqui (managedAreas).
       for (const member of members) {
         if (!member.managerId) continue;
-        const manager = members.find((m) => m.id === member.managerId);
-        if (!manager) continue; // gestor direto fora desta área/inativo — não gera
+        const manager = usersById.get(member.managerId);
+        if (!manager) continue; // gestor inativo/inexistente — não gera
 
         feedbacksToCreate.push({
           cycleId,
@@ -120,7 +134,12 @@ class PulseAssignmentService {
       }
 
       // Avaliação de Colegas — todos-contra-todos, só dentro do MESMO TIME
-      // IMEDIATO (mesmo managerId), não a área inteira.
+      // IMEDIATO (mesmo managerId) E DENTRO DESTA MESMA ÁREA. Isso já é
+      // garantido pela própria estrutura do laço (percorremos área por
+      // área, e "members" só contém gente cuja área PRINCIPAL é esta) —
+      // mesmo que o gestor compartilhado atue em várias áreas, colegas de
+      // áreas diferentes nunca caem no mesmo grupo aqui, porque cada um
+      // só aparece na lista da própria área principal.
       const teams = new Map<string, typeof members>();
       for (const member of members) {
         const key = member.managerId ?? `__sem-gestor-${member.id}`; // sem gestor = time só dele, não forma par

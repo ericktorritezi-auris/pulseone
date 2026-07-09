@@ -22,7 +22,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole, AuditAction } from '@prisma/client';
 import { Audit } from '../common/decorators/audit.decorator';
-import { IsBoolean, IsEmail, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsEmail, IsOptional, IsString, Matches, MinLength } from 'class-validator';
 
 // Mesmo padrão de senha forte usado em todo o sistema (auth.dto.ts).
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*[!@#$&*])(?=.*[0-9])(?=.*[a-z]).{8,}$/;
@@ -63,6 +63,15 @@ class CreateUserDto {
   @IsString()
   managerId?: string;
 
+  // Áreas ADICIONAIS de atuação, além da área principal (`areaId`) — só
+  // faz sentido quando o cargo escolhido é de gestão (pedido do Erick: um
+  // gestor pode atuar em mais de uma área). Ignorado se o cargo não for
+  // de gestão.
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  managedAreaIds?: string[];
+
   // Liberação de e-mail duplicado (seção 5.17) — só usado quando o backend
   // já avisou que esse e-mail existe e a pessoa confirmou a senha MASTER.
   @IsOptional()
@@ -82,6 +91,10 @@ class UpdateUserDto {
   @IsOptional() @IsString() positionId?: string;
   @IsOptional() @IsString() managerId?: string | null;
   @IsOptional() @IsString() masterPasswordOverride?: string;
+  // Áreas adicionais de atuação (pedido do Erick) — só tem efeito se a
+  // pessoa for/virar GESTOR. Se enviado, SUBSTITUI a lista inteira (não
+  // acumula) — inclui a área principal automaticamente.
+  @IsOptional() @IsArray() @IsString({ each: true }) managedAreaIds?: string[];
 }
 
 // Redefinição de senha por terceiros (seção 5.19): só o ADMIN pode fazer
@@ -214,17 +227,22 @@ export class UsersService {
   }
 
   async findAll(requester: AuthUser) {
-    // ADMIN: vê COLABORADOR + GESTOR de todas as áreas, e TAMBÉM o próprio
-    // cadastro (mas nunca o de outro ADMIN, se existir mais de um).
-    // GESTOR: vê COLABORADOR + o próprio cadastro de GESTOR, só da própria área.
+    // ADMIN vê TODO MUNDO — colaborador, gestor e qualquer outro admin
+    // (regra explícita do Erick: admin sempre vê todos os cadastros).
+    // GESTOR vê COLABORADOR + o próprio cadastro de GESTOR, só da própria área.
     const where: any =
       requester.role === UserRole.ADMIN
-        ? { OR: [{ role: { in: [UserRole.COLABORADOR, UserRole.GESTOR] } }, { id: requester.id }] }
+        ? {}
         : { areaId: requester.areaId, role: { in: [UserRole.COLABORADOR, UserRole.GESTOR] } };
 
     return this.prisma.user.findMany({
       where,
-      include: { area: true, position: true, manager: { select: { id: true, fullName: true } } },
+      include: {
+        area: true,
+        position: true,
+        manager: { select: { id: true, fullName: true } },
+        managedAreas: { select: { id: true } },
+      },
       orderBy: { fullName: 'asc' },
     });
   }
@@ -248,7 +266,9 @@ export class UsersService {
   async findPotentialManagers(areaId: string, excludeUserId?: string) {
     return this.prisma.user.findMany({
       where: {
-        areaId,
+        // Gestor pode atuar em mais de uma área (pedido do Erick) — o
+        // vínculo que importa aqui é managedAreas, não o areaId único.
+        managedAreas: { some: { id: areaId } },
         role: UserRole.GESTOR,
         active: true,
         ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
@@ -327,6 +347,19 @@ export class UsersService {
         role,
         managerId,
         passwordHash,
+        // Gestor sempre atua PELO MENOS na própria área principal — mais
+        // as áreas adicionais escolhidas, se houver (pedido do Erick: um
+        // gestor pode gerenciar mais de uma área). Colaborador nunca tem
+        // managedAreas (não faz sentido pra quem não é gestor).
+        ...(role === UserRole.GESTOR
+          ? {
+              managedAreas: {
+                connect: [areaId, ...(dto.managedAreaIds ?? [])]
+                  .filter((id, i, arr) => arr.indexOf(id) === i) // remove duplicata
+                  .map((id) => ({ id })),
+              },
+            }
+          : {}),
       },
     });
   }
@@ -363,6 +396,10 @@ export class UsersService {
         managerId,
         passwordHash,
         emailVerified: false,
+        // Autocadastro não oferece multi-seleção de área (fica só a área
+        // principal escolhida) — se precisar atuar em mais áreas depois,
+        // um admin ajusta na edição.
+        ...(role === UserRole.GESTOR ? { managedAreas: { connect: [{ id: dto.areaId }] } } : {}),
       },
     });
   }
@@ -383,7 +420,7 @@ export class UsersService {
 
   findPublicManagers(areaId: string) {
     return this.prisma.user.findMany({
-      where: { areaId, role: UserRole.GESTOR, active: true },
+      where: { managedAreas: { some: { id: areaId } }, role: UserRole.GESTOR, active: true },
       select: { id: true, fullName: true },
       orderBy: { fullName: 'asc' },
     });
@@ -435,6 +472,19 @@ export class UsersService {
     if ('managerId' in dto) {
       const areaId = dto.areaId ?? target.areaId;
       data.managerId = await this.resolveManagerId(dto.managerId, areaId, id);
+    }
+
+    // Áreas adicionais de atuação (pedido do Erick) — só se aplica a quem
+    // é/vira GESTOR. "set" substitui a lista inteira, sempre garantindo
+    // que a área principal (nova ou atual) está incluída.
+    delete data.managedAreaIds;
+    const effectiveRole = data.role ?? target.role;
+    if (dto.managedAreaIds && effectiveRole === UserRole.GESTOR) {
+      const effectiveAreaId = dto.areaId ?? target.areaId;
+      const allAreaIds = [effectiveAreaId, ...dto.managedAreaIds].filter(
+        (areaId, i, arr): areaId is string => !!areaId && arr.indexOf(areaId) === i,
+      );
+      data.managedAreas = { set: allAreaIds.map((areaId) => ({ id: areaId })) };
     }
 
     return this.prisma.user.update({ where: { id }, data });

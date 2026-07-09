@@ -85,6 +85,12 @@ model User {
   managerId     String?
   manager       User?      @relation("DirectReports", fields: [managerId], references: [id])
   directReports User[]     @relation("DirectReports")
+  // Áreas de atuação ADICIONAIS de um gestor (além da área principal em
+  // `areaId`) — pedido do Erick: um gestor pode gerenciar mais de uma área
+  // ao mesmo tempo. Isso só afeta QUEM PODE SER ESCOLHIDO como Gestor
+  // Direto de alguém — nunca afeta avaliação de colegas, que continua
+  // restrita à mesma área (seção 5.7 + correção da seção 5.25).
+  managedAreas  Area[]     @relation("GestorAreas")
   active        Boolean    @default(true)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
@@ -111,6 +117,7 @@ model Area {
   name      String   @unique
   users     User[]
   positions Position[]
+  gestoresAtuantes User[] @relation("GestorAreas")
   createdAt DateTime @default(now())
 }
 

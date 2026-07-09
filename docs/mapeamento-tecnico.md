@@ -686,6 +686,21 @@ Login/registro continuam com gravação inline em `auth.service.ts` (já existia
 
 **Confirmado, sem necessidade de mudança:** "admins são pares" já era verdade na arquitetura — `PulseCycle` não tem nenhum campo amarrando o ciclo a um admin específico, e todas as ações do ciclo são protegidas só por `@Roles(ADMIN)` (papel, não identidade). Qualquer admin pode continuar de onde outro parou, em qualquer etapa.
 
+### 5.25 Admin vê todos os cadastros + Gestor em múltiplas áreas (pedido do Erick)
+
+**Ponto 1 — removido:** `fix-position-area.js` tirado do `start.js` (e o arquivo apagado) — já cumpriu a função, cargos antigos confirmados vinculados a Marketing.
+
+**Ponto 2 — corrigido:** `findAll()` tinha uma regra antiga ("admin nunca vê outro admin") que ficou desatualizada. Agora `ADMIN` vê `{}` (todo mundo, sem filtro nenhum) — inclusive outros admins.
+
+**Ponto 3 — gestor em múltiplas áreas:**
+- **Schema**: `User.managedAreas Area[]` (N:N implícita, tabela `_GestorAreas`) — áreas ADICIONAIS de atuação de um gestor, separado da área principal (`areaId`, que continua existindo e define a própria participação da pessoa no Pulse).
+- **Migração pontual** (`fix-gestor-areas.js`, roda DEPOIS do `db push` — tabela nova, sem dado legado, não precisa da proteção via SQL bruto): vincula todo gestor existente a **todas** as áreas do sistema.
+- **UX escolhida (sugestão do próprio Erick, melhor que a original):** em vez de uma tela separada de gerenciamento, o multi-select "Outras áreas de atuação" aparece direto no formulário de Pessoas quando o **Cargo** escolhido é de gestão (`isManager=true`) — a área principal já escolhida fica implícita, só marca as adicionais.
+- **Duas correções obrigatórias no motor do Pulse** (sem elas, o recurso quebraria a regra de avaliação por área):
+  1. `PulseAssignmentService.generateForCycle`: a busca do gestor de cada pessoa deixou de ser limitada aos membros da MESMA área — agora busca numa lista global de todos os usuários ativos (`usersById`, um `Map` por id), resolvendo corretamente quando o gestor atua em outra área.
+  2. **Avaliação de Colegas**: na revisão, ficou confirmado que essa parte **já era segura por construção** — o laço principal já é por área (usando a área PRINCIPAL de cada pessoa), então colegas de áreas diferentes nunca caem no mesmo grupo, mesmo compartilhando um gestor que atua nas duas. Não precisou de mudança nessa parte — só a busca do gestor precisava ser corrigida.
+- `GET /users/managers?areaId=X` e `GET /public/managers?areaId=X` agora consultam `managedAreas`, não mais `areaId` isolado.
+
 ### 5.16 Sprint 6 — parte 1: Autocadastro, Admin sem departamento, Reset gated e Manual do Usuário
 
 **Autocadastro público (pedido do Erick):** `POST /auth/register` — o funcionário cria a própria conta sem depender de admin/gestor. Escolhe livremente área e cargo (o `role` continua sendo derivado do cargo, nunca escolhido livremente, e nunca pode virar ADMIN por essa via). Dispara o e-mail de verificação automaticamente (fluxo que existia desde a Sprint 0, mas nunca tinha sido conectado a um cadastro real até agora). Rotas públicas novas (`/public/areas`, `/public/positions`, `/public/managers`) alimentam os selects do formulário antes da pessoa ter conta. Tela `/cadastro` (fora do layout autenticado) + link "Cadastre-se" na tela de login.
