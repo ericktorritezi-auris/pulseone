@@ -104,7 +104,7 @@ export function Sidebar({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 shrink-0 bg-p-primary-dark text-white flex flex-col h-screen transform transition-transform duration-200 ease-in-out
+        className={`fixed inset-y-0 left-0 z-50 w-64 shrink-0 bg-p-primary-dark text-white flex flex-col transform transition-transform duration-200 ease-in-out
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0 md:sticky md:top-0`}
       >
@@ -119,7 +119,7 @@ export function Sidebar({
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4">
+        <nav className="flex-1 min-h-0 overflow-y-auto py-4">
           {menu.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
@@ -143,7 +143,7 @@ export function Sidebar({
 
         <button
           onClick={logout}
-          className="flex items-center gap-3 px-6 py-4 text-sm text-slate-300 hover:text-white border-t border-white/10"
+          className="flex items-center gap-3 px-6 py-4 text-sm text-slate-300 hover:text-white border-t border-white/10 shrink-0"
         >
           <LogOut size={18} />
           Sair
