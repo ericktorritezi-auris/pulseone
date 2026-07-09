@@ -179,12 +179,17 @@ export class UsersService {
       throw new ForbiddenException('Uma pessoa não pode ser gestora direta de si mesma.');
     }
 
-    const manager = await this.prisma.user.findUnique({ where: { id: managerId } });
+    const manager = await this.prisma.user.findUnique({
+      where: { id: managerId },
+      include: { managedAreas: { select: { id: true } } },
+    });
     if (!manager || !manager.active || manager.role !== UserRole.GESTOR) {
       throw new ForbiddenException('O gestor direto indicado precisa ser uma pessoa ativa com cargo de gestão.');
     }
-    if (manager.areaId !== areaId) {
-      throw new ForbiddenException('O gestor direto precisa ser da mesma área.');
+    // Corrigido: checa o vínculo N:N (managedAreas), não mais o areaId
+    // único antigo — um gestor pode atuar em mais de uma área (seção 5.25).
+    if (!manager.managedAreas.some((a) => a.id === areaId)) {
+      throw new ForbiddenException('O gestor direto precisa atuar na mesma área.');
     }
     if (selfId && manager.managerId === selfId) {
       throw new ForbiddenException('Isso criaria um ciclo de hierarquia (vocês seriam gestores um do outro).');
@@ -202,7 +207,10 @@ export class UsersService {
    * - Cadastro de COLABORADOR: ADMIN vê/edita qualquer um; GESTOR vê/edita
    *   só os da própria área.
    */
-  private assertCanAccessTarget(target: { id: string; role: UserRole; areaId: string | null }, requester: AuthUser) {
+  private async assertCanAccessTarget(
+    target: { id: string; role: UserRole; areaId: string | null },
+    requester: AuthUser,
+  ) {
     const isSelf = target.id === requester.id;
 
     if (target.role === UserRole.ADMIN) {
@@ -219,9 +227,18 @@ export class UsersService {
       return;
     }
 
-    // Target é COLABORADOR
-    if (requester.role === UserRole.GESTOR && target.areaId !== requester.areaId) {
-      throw new ForbiddenException('Você só pode acessar pessoas da sua própria área.');
+    // Target é COLABORADOR — gestor precisa ATUAR na área dessa pessoa
+    // (managedAreas, não mais só a área principal — seção 5.25: um gestor
+    // pode gerenciar colaboradores em mais de uma área).
+    if (requester.role === UserRole.GESTOR) {
+      const requesterWithAreas = await this.prisma.user.findUnique({
+        where: { id: requester.id },
+        select: { managedAreas: { select: { id: true } } },
+      });
+      const managesThisArea = requesterWithAreas?.managedAreas.some((a) => a.id === target.areaId);
+      if (!managesThisArea) {
+        throw new ForbiddenException('Você só pode acessar pessoas de uma área em que atua.');
+      }
     }
     // ADMIN acessa qualquer COLABORADOR livremente.
   }
@@ -255,7 +272,7 @@ export class UsersService {
 
     if (!user) throw new NotFoundException('Usuário não encontrado.');
 
-    this.assertCanAccessTarget(user, requester);
+    await this.assertCanAccessTarget(user, requester);
 
     return user;
   }
@@ -429,7 +446,7 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto, requester: AuthUser) {
     const target = await this.prisma.user.findUniqueOrThrow({ where: { id } });
 
-    this.assertCanAccessTarget(target, requester);
+    await this.assertCanAccessTarget(target, requester);
 
     if (dto.email && dto.email !== target.email) {
       await this.assertEmailAvailable(dto.email, dto.masterPasswordOverride);
@@ -493,7 +510,7 @@ export class UsersService {
   async remove(id: string, requester: AuthUser) {
     const target = await this.prisma.user.findUniqueOrThrow({ where: { id } });
 
-    this.assertCanAccessTarget(target, requester);
+    await this.assertCanAccessTarget(target, requester);
 
     // Soft delete — mantém histórico de feedbacks/pulses íntegro
     return this.prisma.user.update({ where: { id }, data: { active: false } });

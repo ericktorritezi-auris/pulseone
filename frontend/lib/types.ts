@@ -198,10 +198,16 @@ export interface AdminDashboardData {
 
 export interface ManagerDashboardData {
   teamSize: number;
-  team: { id: string; fullName: string; positionName: string }[];
-  scoreMedio: number | null;
-  npsMedio: number | null;
+  team: { id: string; fullName: string; positionName: string; areaName: string }[];
   cycleLabel: string | null;
+  porArea: {
+    areaId: string;
+    areaName: string;
+    colaboradores: number;
+    scoreMedio: number | null;
+    npsMedio: number | null;
+  }[];
+  avaliacaoRecebidaPorArea: { areaName: string; scoreMedio: number }[];
 }
 
 export interface AuditLogEntry {

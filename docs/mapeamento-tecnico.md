@@ -701,6 +701,25 @@ Login/registro continuam com gravação inline em `auth.service.ts` (já existia
   2. **Avaliação de Colegas**: na revisão, ficou confirmado que essa parte **já era segura por construção** — o laço principal já é por área (usando a área PRINCIPAL de cada pessoa), então colegas de áreas diferentes nunca caem no mesmo grupo, mesmo compartilhando um gestor que atua nas duas. Não precisou de mudança nessa parte — só a busca do gestor precisava ser corrigida.
 - `GET /users/managers?areaId=X` e `GET /public/managers?areaId=X` agora consultam `managedAreas`, não mais `areaId` isolado.
 
+### 5.26 Correção — validações residuais ainda checavam área única do gestor
+
+Depois de implementar a seção 5.25, o Erick reportou um erro real ao tentar vincular um gestor que atua em Vendas (via `managedAreas`) como gestor direto de alguém em Vendas — o dropdown mostrava ele certo, mas o **salvamento** rejeitava com "gestor precisa ser da mesma área". Encontradas e corrigidas **4 checagens residuais** que ainda comparavam `manager.areaId` (a área principal única) em vez do vínculo N:N novo:
+
+1. `resolveManagerId()` — validação no cadastro/edição de pessoa (a que gerou o erro reportado).
+2. `assertCanAccessTarget()` — um gestor não conseguia acessar/editar colaboradores das áreas adicionais que também gerencia (só a principal). Virou assíncrona pra consultar `managedAreas` fresco.
+3. `PulseFeedbacksService.submitAnswers()` — trava de segurança que bloquearia a resposta de uma avaliação hierárquica (`AVALIACAO_EQUIPE`/`AVALIACAO_GESTOR`) legitimamente cruzando área. Ajustada: **Colega/Autoavaliação continuam exigindo mesma área** (correto, não muda); **hierárquica agora valida via `managedAreas`** do gestor envolvido, não mais área idêntica.
+4. `PulseTeamService.computeProgress()` (tela "Avaliação do Time" do gestor) — só mostrava gente da área principal; agora considera todas as áreas em `managedAreas`.
+
+Nenhuma dessas é conceitualmente nova — são os mesmos pontos que ficaram de fora da varredura inicial da seção 5.25 por não aparecerem óbvios até serem testados na prática.
+
+### 5.27 Dashboard do Gestor com quebra por área + painel informativo (pedido do Erick)
+
+**Confirmado explicitamente com o Erick antes de implementar:** o score/parecer **oficial** de cada colaborador continua sendo um número único por ciclo (`PulseScore`) — isso não muda. As mudanças aqui são só de **visualização/agrupamento**, nunca de cálculo.
+
+- **`GET /dashboard/manager`**: agora retorna `porArea` (um bloco por área que o gestor gerencia — colaboradores, score médio, NPS médio, cada área separada) em vez de um número só misturando todo mundo. A lista de membros da equipe também mostra a área de cada um.
+- **Painel informativo novo — "Como cada área te avaliou"**: agrupa as avaliações `AVALIACAO_GESTOR` que o próprio gestor recebeu (de cada liderado) pela área de quem avaliou, mostrando um score médio por área. Reaproveita o mesmo cálculo de score por avaliação usado no fechamento oficial (`behaviorScoreForFeedback`, espelha `PulseScoreService.scoreForFeedback`), mas é **só informativo** — nunca alimenta `PulseScore` nem o parecer.
+- **Confirmado sem necessidade de mudança:** a autoavaliação continua única por ciclo — o motor de geração já processa cada gestor uma única vez (usa a área principal pra decidir "quem é membro de qual área", nunca duplica por causa de `managedAreas`).
+
 ### 5.16 Sprint 6 — parte 1: Autocadastro, Admin sem departamento, Reset gated e Manual do Usuário
 
 **Autocadastro público (pedido do Erick):** `POST /auth/register` — o funcionário cria a própria conta sem depender de admin/gestor. Escolhe livremente área e cargo (o `role` continua sendo derivado do cargo, nunca escolhido livremente, e nunca pode virar ADMIN por essa via). Dispara o e-mail de verificação automaticamente (fluxo que existia desde a Sprint 0, mas nunca tinha sido conectado a um cadastro real até agora). Rotas públicas novas (`/public/areas`, `/public/positions`, `/public/managers`) alimentam os selects do formulário antes da pessoa ter conta. Tela `/cadastro` (fora do layout autenticado) + link "Cadastre-se" na tela de login.

@@ -34,8 +34,23 @@ class PulseTeamService {
   }
 
   private async computeProgress(cycleId: string, requester: AuthUser) {
+    // Gestor pode atuar em mais de uma área (seção 5.25) — o progresso do
+    // time precisa considerar TODAS as áreas que ele gerencia, não só a
+    // área principal dele.
+    const areaIds =
+      requester.role === UserRole.GESTOR
+        ? (
+            await this.prisma.user.findUnique({
+              where: { id: requester.id },
+              select: { managedAreas: { select: { id: true } } },
+            })
+          )?.managedAreas.map((a) => a.id) ?? []
+        : requester.areaId
+          ? [requester.areaId]
+          : [];
+
     const members = await this.prisma.user.findMany({
-      where: { areaId: requester.areaId, active: true, role: { not: UserRole.ADMIN } },
+      where: { areaId: { in: areaIds }, active: true, role: { not: UserRole.ADMIN } },
       select: { id: true, fullName: true, role: true },
       orderBy: { fullName: 'asc' },
     });

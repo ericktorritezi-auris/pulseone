@@ -15,7 +15,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { PulseCycleStatus, PulseEvaluationStatus, UserRole, AuditAction } from '@prisma/client';
+import { PulseCycleStatus, PulseEvaluationStatus, PulseEvaluationType, UserRole, AuditAction } from '@prisma/client';
 import { ArrayMinSize, IsArray, IsInt, IsString, Max, Min, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -126,13 +126,32 @@ class PulseFeedbacksService {
     }
 
     // Trava de segurança independente da geração automática (seção 5.1):
-    // nunca permite uma avaliação entre pessoas de áreas diferentes.
+    // nunca permite avaliação de COLEGA fora da mesma área. Já a
+    // avaliação HIERÁRQUICA (equipe/gestor) pode cruzar área — um gestor
+    // pode atuar em mais de uma (managedAreas — seção 5.25).
     const [evaluator, target] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({ where: { id: feedback.evaluatorId } }),
       this.prisma.user.findUniqueOrThrow({ where: { id: feedback.targetId } }),
     ]);
-    if (evaluator.areaId !== target.areaId) {
-      throw new ForbiddenException('Avaliações só podem ocorrer entre pessoas da mesma área.');
+
+    if (feedback.type === PulseEvaluationType.COLEGA || feedback.type === PulseEvaluationType.AUTOAVALIACAO) {
+      if (evaluator.areaId !== target.areaId) {
+        throw new ForbiddenException('Avaliações de colega só podem ocorrer entre pessoas da mesma área.');
+      }
+    } else {
+      // AVALIACAO_EQUIPE: evaluator=gestor, target=liderado.
+      // AVALIACAO_GESTOR: evaluator=liderado, target=gestor.
+      const isEquipe = feedback.type === PulseEvaluationType.AVALIACAO_EQUIPE;
+      const managerId = isEquipe ? evaluator.id : target.id;
+      const memberAreaId = isEquipe ? target.areaId : evaluator.areaId;
+
+      const manager = await this.prisma.user.findUnique({
+        where: { id: managerId },
+        include: { managedAreas: { select: { id: true } } },
+      });
+      if (!memberAreaId || !manager?.managedAreas.some((a) => a.id === memberAreaId)) {
+        throw new ForbiddenException('Essa avaliação hierárquica não é permitida — o gestor não atua nessa área.');
+      }
     }
 
     const cycle = await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id: feedback.cycleId } });

@@ -3,7 +3,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { PulseCycleStatus, PulseEvaluationStatus, PulseReportStatus, UserRole } from '@prisma/client';
+import { PulseCycleStatus, PulseEvaluationStatus, PulseEvaluationType, PulseReportStatus, UserRole } from '@prisma/client';
 
 type AuthUser = { id: string; role: UserRole; areaId: string | null };
 
@@ -119,43 +119,121 @@ class DashboardService {
   // médio da equipe (liderados diretos), quantidade de membros + listagem.
   // Como managerId exige mesma área (seção 5.7), um gestor nunca gerencia
   // mais de uma área no modelo atual — por isso não existe "por área" aqui.
+  // Mesmo cálculo de score por avaliação usado no fechamento oficial do
+  // ciclo (PulseScoreService.scoreForFeedback) — reaproveitado aqui só pro
+  // painel INFORMATIVO "como cada área me avalia" (nunca altera o score
+  // oficial, que continua um número único por ciclo — decisão do Erick).
+  private async behaviorScoreForFeedback(feedbackId: string): Promise<number | null> {
+    const answers = await this.prisma.pulseAnswer.findMany({
+      where: { pulseFeedbackId: feedbackId },
+      include: { question: true },
+    });
+    const behavioral = answers.filter((a) => !a.question.isNps).map((a) => a.value);
+    if (behavioral.length === 0) return null;
+    return (behavioral.reduce((a, v) => a + v, 0) / behavioral.length) * 10;
+  }
+
   async getManagerDashboard(requesterId: string) {
+    // Áreas que este gestor gerencia (pode ser mais de uma — seção 5.25).
+    const requesterWithAreas = await this.prisma.user.findUnique({
+      where: { id: requesterId },
+      select: { managedAreas: { select: { id: true, name: true } } },
+    });
+    const managedAreas = requesterWithAreas?.managedAreas ?? [];
+
     const team = await this.prisma.user.findMany({
       where: { managerId: requesterId, active: true },
-      select: { id: true, fullName: true, position: { select: { name: true } } },
+      select: {
+        id: true,
+        fullName: true,
+        areaId: true,
+        area: { select: { name: true } },
+        position: { select: { name: true } },
+      },
       orderBy: { fullName: 'asc' },
     });
 
-    const teamIds = team.map((t) => t.id);
-    let scoreMedio: number | null = null;
-    let npsMedio: number | null = null;
-    let cycleLabel: string | null = null;
+    const latestCycle = await this.prisma.pulseCycle.findFirst({
+      where: { status: { in: [PulseCycleStatus.FINALIZADO, PulseCycleStatus.ARQUIVADO] } },
+      orderBy: { openedAt: 'desc' },
+    });
 
-    if (teamIds.length > 0) {
-      const latestCycle = await this.prisma.pulseCycle.findFirst({
-        where: { status: { in: [PulseCycleStatus.FINALIZADO, PulseCycleStatus.ARQUIVADO] } },
-        orderBy: { openedAt: 'desc' },
-      });
+    // Quebra por área (pedido do Erick): score/NPS médio de cada área
+    // separadamente, não um número só misturando todo mundo.
+    const porArea: {
+      areaId: string;
+      areaName: string;
+      colaboradores: number;
+      scoreMedio: number | null;
+      npsMedio: number | null;
+    }[] = [];
 
-      if (latestCycle) {
+    for (const area of managedAreas) {
+      const membrosDaArea = team.filter((t) => t.areaId === area.id);
+      let scoreMedio: number | null = null;
+      let npsMedio: number | null = null;
+
+      if (latestCycle && membrosDaArea.length > 0) {
         const scores = await this.prisma.pulseScore.findMany({
-          where: { cycleId: latestCycle.id, userId: { in: teamIds } },
+          where: { cycleId: latestCycle.id, userId: { in: membrosDaArea.map((m) => m.id) } },
         });
-
         if (scores.length > 0) {
           scoreMedio = scores.reduce((a, s) => a + s.finalScore, 0) / scores.length;
           npsMedio = scores.reduce((a, s) => a + s.npsScore, 0) / scores.length;
-          cycleLabel = latestCycle.label;
         }
       }
+
+      porArea.push({
+        areaId: area.id,
+        areaName: area.name,
+        colaboradores: membrosDaArea.length,
+        scoreMedio,
+        npsMedio,
+      });
+    }
+
+    // Painel informativo: como cada área avalia ESTE gestor (AVALIACAO_GESTOR
+    // recebida, agrupada pela área de quem avaliou) — só informativo, nunca
+    // substitui o score oficial dele (que continua um número único).
+    let avaliacaoRecebidaPorArea: { areaName: string; scoreMedio: number }[] = [];
+    if (latestCycle) {
+      const recebidas = await this.prisma.pulseFeedback.findMany({
+        where: {
+          cycleId: latestCycle.id,
+          targetId: requesterId,
+          type: PulseEvaluationType.AVALIACAO_GESTOR,
+          status: PulseEvaluationStatus.FINALIZADO,
+        },
+        include: { evaluator: { select: { area: { select: { name: true } } } } },
+      });
+
+      const scoresPorArea = new Map<string, number[]>();
+      for (const fb of recebidas) {
+        const areaName = fb.evaluator.area?.name ?? 'Sem área';
+        const score = await this.behaviorScoreForFeedback(fb.id);
+        if (score === null) continue;
+        const arr = scoresPorArea.get(areaName) ?? [];
+        arr.push(score);
+        scoresPorArea.set(areaName, arr);
+      }
+
+      avaliacaoRecebidaPorArea = Array.from(scoresPorArea.entries()).map(([areaName, scores]) => ({
+        areaName,
+        scoreMedio: scores.reduce((a, v) => a + v, 0) / scores.length,
+      }));
     }
 
     return {
       teamSize: team.length,
-      team: team.map((t) => ({ id: t.id, fullName: t.fullName, positionName: t.position?.name ?? '—' })),
-      scoreMedio,
-      npsMedio,
-      cycleLabel,
+      team: team.map((t) => ({
+        id: t.id,
+        fullName: t.fullName,
+        positionName: t.position?.name ?? '—',
+        areaName: t.area?.name ?? '—',
+      })),
+      cycleLabel: latestCycle?.label ?? null,
+      porArea,
+      avaliacaoRecebidaPorArea,
     };
   }
 

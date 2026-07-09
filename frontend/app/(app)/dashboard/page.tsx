@@ -124,29 +124,65 @@ export default function DashboardPage() {
 
       {/* ============ DASHBOARD DO GESTOR (executivo da própria equipe) ============ */}
       {isGestor && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <p className="text-xs text-p-neutral mb-1">Score médio da equipe</p>
-            <p className="text-2xl font-semibold text-p-primary-dark">
-              {managerData?.scoreMedio !== null && managerData?.scoreMedio !== undefined
-                ? managerData.scoreMedio.toFixed(1)
-                : '—'}
-            </p>
-            {managerData?.cycleLabel && <p className="text-xs text-p-neutral mt-1">{managerData.cycleLabel}</p>}
-          </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <p className="text-xs text-p-neutral mb-1">NPS médio da equipe</p>
-            <p className="text-2xl font-semibold text-p-primary-dark">
-              {managerData?.npsMedio !== null && managerData?.npsMedio !== undefined
-                ? managerData.npsMedio.toFixed(1)
-                : '—'}
-            </p>
-          </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <p className="text-xs text-p-neutral mb-1">Membros da equipe</p>
+        <>
+          <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
+            <p className="text-xs text-p-neutral mb-1">Total de colaboradores (todas as áreas)</p>
             <p className="text-2xl font-semibold text-p-primary-dark">{managerData?.teamSize ?? 0}</p>
+            {managerData?.cycleLabel && (
+              <p className="text-xs text-p-neutral mt-1">Último ciclo: {managerData.cycleLabel}</p>
+            )}
           </div>
-        </div>
+
+          <p className="text-xs font-semibold text-p-neutral uppercase mb-3">Minhas áreas</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            {managerData?.porArea.map((a) => (
+              <div key={a.areaId} className="bg-white rounded-xl border border-slate-200 p-5">
+                <p className="text-sm font-semibold text-p-primary-dark mb-3">{a.areaName}</p>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-lg font-semibold text-p-primary-dark">{a.colaboradores}</p>
+                    <p className="text-xs text-p-neutral">Colaboradores</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold text-p-primary-dark">
+                      {a.scoreMedio !== null ? a.scoreMedio.toFixed(1) : '—'}
+                    </p>
+                    <p className="text-xs text-p-neutral">Score médio</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold text-p-primary-dark">
+                      {a.npsMedio !== null ? a.npsMedio.toFixed(1) : '—'}
+                    </p>
+                    <p className="text-xs text-p-neutral">NPS médio</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {managerData && managerData.porArea.length === 0 && (
+              <p className="text-sm text-p-neutral">Nenhuma área vinculada ainda.</p>
+            )}
+          </div>
+
+          {managerData && managerData.avaliacaoRecebidaPorArea.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
+              <p className="text-xs font-semibold text-p-neutral uppercase mb-1">
+                Como cada área te avaliou
+              </p>
+              <p className="text-xs text-p-neutral mb-3">
+                Informativo — não substitui seu score oficial do ciclo, que continua sendo um
+                número único.
+              </p>
+              <div className="space-y-2">
+                {managerData.avaliacaoRecebidaPorArea.map((a) => (
+                  <div key={a.areaName} className="flex justify-between text-sm">
+                    <span className="text-p-neutral">{a.areaName}</span>
+                    <span className="font-medium text-p-primary-dark">{a.scoreMedio.toFixed(1)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {isGestor && managerData && managerData.team.length > 0 && (
@@ -156,10 +192,13 @@ export default function DashboardPage() {
             {managerData.team.map((m) => (
               <div key={m.id} className="flex items-center gap-3">
                 <AvatarInitials name={m.fullName} size="sm" />
-                <div>
+                <div className="flex-1">
                   <p className="text-sm font-medium text-p-primary-dark">{m.fullName}</p>
                   <p className="text-xs text-p-neutral">{m.positionName}</p>
                 </div>
+                <span className="text-xs text-p-neutral bg-slate-100 px-2 py-1 rounded-full">
+                  {m.areaName}
+                </span>
               </div>
             ))}
           </div>
