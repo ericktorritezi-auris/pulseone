@@ -106,8 +106,12 @@ class AdminToolsService {
       data: { areaId: null, positionId: null },
     });
 
-    await this.prisma.area.deleteMany({});
+    // Cargo antes de área — Position.areaId é uma FK obrigatória pra Area
+    // (desde que cargo passou a pertencer a uma área), então precisa
+    // apagar o filho primeiro, senão o banco recusa apagar a área ainda
+    // referenciada.
     await this.prisma.position.deleteMany({});
+    await this.prisma.area.deleteMany({});
 
     // PulseQuestion (as 5 perguntas oficiais) NUNCA é apagada aqui — não é
     // dado de teste, é configuração fixa do sistema.
