@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, FormEvent } from 'react';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, RotateCcw } from 'lucide-react';
 import { api } from '../../../../lib/api';
 import { useAuth } from '../../../../lib/auth-context';
 import { Area, ManagerOption, Person, Position } from '../../../../lib/types';
@@ -250,6 +250,17 @@ export default function PessoasPage() {
     await loadData();
   }
 
+  // Reativação (pedido do Erick — não existia antes).
+  async function handleReactivate(id: string) {
+    if (!confirm('Reativar esta pessoa? Ela volta a ter acesso ao sistema.')) return;
+    try {
+      await api.patch(`/users/${id}/reactivate`);
+      await loadData();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao reativar.');
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -317,9 +328,19 @@ export default function PessoasPage() {
                     <button onClick={() => openEdit(person)} className="text-p-neutral hover:text-p-primary">
                       <Pencil size={16} />
                     </button>
-                    <button onClick={() => handleRemove(person.id)} className="text-p-neutral hover:text-red-600">
-                      <Trash2 size={16} />
-                    </button>
+                    {person.active ? (
+                      <button onClick={() => handleRemove(person.id)} className="text-p-neutral hover:text-red-600">
+                        <Trash2 size={16} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleReactivate(person.id)}
+                        title="Reativar"
+                        className="text-p-neutral hover:text-p-success"
+                      >
+                        <RotateCcw size={16} />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

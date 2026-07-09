@@ -18,6 +18,7 @@ import {
   LogOut,
   FileText,
   ScrollText,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
 
@@ -67,7 +68,17 @@ const GESTOR_MENU_COM_CADASTRO: MenuItem[] = [
   { href: '/perfil', label: 'Meu Perfil', icon: User },
 ];
 
-export function Sidebar() {
+// mobileOpen/onMobileClose são opcionais de propósito — no desktop (md+)
+// o Sidebar continua exatamente como sempre foi, sempre visível, sem
+// depender de nenhum estado. Só no mobile (abaixo de md) que ele vira um
+// painel deslizante, controlado por esses dois props.
+export function Sidebar({
+  mobileOpen = false,
+  onMobileClose,
+}: {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
 
@@ -81,41 +92,63 @@ export function Sidebar() {
         : COLABORADOR_MENU;
 
   return (
-    <aside className="w-64 shrink-0 bg-p-primary-dark text-white flex flex-col h-screen sticky top-0">
-      <div className="px-6 py-5 border-b border-white/10">
-        <span className="text-xl font-semibold">
-          Pulse<span className="text-p-secondary">One</span>
-        </span>
-      </div>
+    <>
+      {/* Camada escura atrás do menu, só no mobile e só quando aberto —
+          clicar nela fecha o menu. Nunca aparece no desktop (md:hidden). */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={onMobileClose}
+          aria-hidden="true"
+        />
+      )}
 
-      <nav className="flex-1 overflow-y-auto py-4">
-        {menu.map((item) => {
-          const Icon = item.icon;
-          const active = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-6 py-2.5 text-sm transition-colors ${
-                active
-                  ? 'bg-p-primary text-white font-medium'
-                  : 'text-slate-300 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <Icon size={18} />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <button
-        onClick={logout}
-        className="flex items-center gap-3 px-6 py-4 text-sm text-slate-300 hover:text-white border-t border-white/10"
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 shrink-0 bg-p-primary-dark text-white flex flex-col h-screen transform transition-transform duration-200 ease-in-out
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:translate-x-0 md:sticky md:top-0`}
       >
-        <LogOut size={18} />
-        Sair
-      </button>
-    </aside>
+        <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between">
+          <span className="text-xl font-semibold">
+            Pulse<span className="text-p-secondary">One</span>
+          </span>
+          {/* Botão de fechar, só existe no mobile — no desktop o menu nem
+              tem como ser fechado, então não faz sentido mostrar. */}
+          <button onClick={onMobileClose} className="md:hidden text-slate-300 hover:text-white">
+            <X size={20} />
+          </button>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto py-4">
+          {menu.map((item) => {
+            const Icon = item.icon;
+            const active = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onMobileClose}
+                className={`flex items-center gap-3 px-6 py-2.5 text-sm transition-colors ${
+                  active
+                    ? 'bg-p-primary text-white font-medium'
+                    : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <Icon size={18} />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <button
+          onClick={logout}
+          className="flex items-center gap-3 px-6 py-4 text-sm text-slate-300 hover:text-white border-t border-white/10"
+        >
+          <LogOut size={18} />
+          Sair
+        </button>
+      </aside>
+    </>
   );
 }

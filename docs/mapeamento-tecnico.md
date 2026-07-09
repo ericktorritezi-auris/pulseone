@@ -720,6 +720,20 @@ Nenhuma dessas é conceitualmente nova — são os mesmos pontos que ficaram de 
 - **Painel informativo novo — "Como cada área te avaliou"**: agrupa as avaliações `AVALIACAO_GESTOR` que o próprio gestor recebeu (de cada liderado) pela área de quem avaliou, mostrando um score médio por área. Reaproveita o mesmo cálculo de score por avaliação usado no fechamento oficial (`behaviorScoreForFeedback`, espelha `PulseScoreService.scoreForFeedback`), mas é **só informativo** — nunca alimenta `PulseScore` nem o parecer.
 - **Confirmado sem necessidade de mudança:** a autoavaliação continua única por ciclo — o motor de geração já processa cada gestor uma única vez (usa a área principal pra decidir "quem é membro de qual área", nunca duplica por causa de `managedAreas`).
 
+### 5.28 Quatro ajustes finais antes do reset + UX mobile (pedido do Erick)
+
+**1. `findAll()` do gestor — quinto lugar com a mesma classe de bug da seção 5.26:** a tela de Pessoas ainda filtrava pela área principal única (`requester.areaId`), não pelo vínculo `managedAreas`. Corrigido usando a relação direta (`area: { gestoresAtuantes: { some: { id: requester.id } } }`) — sem precisar de uma consulta extra.
+
+**2. Admin pode inativar/reativar outro admin:** `assertCanAccessTarget` permitia só o próprio admin mexer no próprio cadastro. Agora qualquer admin pode agir sobre o cadastro de outro admin também (gestor continua sem acesso nenhum a cadastro de admin).
+
+**3. Reativação (não existia):** `PATCH /users/:id/reactivate`, espelhando exatamente as mesmas checagens de acesso do `remove()`. Botão correspondente na tela de Pessoas, substituindo o ícone de excluir por um de reativar quando a pessoa já está inativa.
+
+**4. Reset agora preserva só admin ATIVO:** antes preservava todo `role=ADMIN` incondicionalmente; agora a condição é `role=ADMIN E active=true` — admin inativado é apagado de vez, junto com o resto. Permite consolidar pra uma única conta antes de resetar (inativa as de teste, mantém só a definitiva ativa).
+
+**UX Mobile (menu lateral):** o `Sidebar` virou um painel deslizante (off-canvas) no mobile — escondido por padrão, abre por cima do conteúdo (nunca mais empurra), com camada escura de fundo que fecha ao clicar fora. No desktop (`md:` e acima), o comportamento é **idêntico ao que já era** — mesma largura, mesma posição fixa lateral, sem nenhuma mudança visual. Controlado por um estado simples em `AppLayout`, com um botão de menu (`Menu` do lucide-react) na `Topbar`, visível só no mobile.
+
+**Migração `fix-gestor-areas.js` removida** do `start.js` e apagada do repositório — confirmada pelo teste do Erick.
+
 ### 5.16 Sprint 6 — parte 1: Autocadastro, Admin sem departamento, Reset gated e Manual do Usuário
 
 **Autocadastro público (pedido do Erick):** `POST /auth/register` — o funcionário cria a própria conta sem depender de admin/gestor. Escolhe livremente área e cargo (o `role` continua sendo derivado do cargo, nunca escolhido livremente, e nunca pode virar ADMIN por essa via). Dispara o e-mail de verificação automaticamente (fluxo que existia desde a Sprint 0, mas nunca tinha sido conectado a um cadastro real até agora). Rotas públicas novas (`/public/areas`, `/public/positions`, `/public/managers`) alimentam os selects do formulário antes da pessoa ter conta. Tela `/cadastro` (fora do layout autenticado) + link "Cadastre-se" na tela de login.

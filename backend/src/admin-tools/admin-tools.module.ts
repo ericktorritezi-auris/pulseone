@@ -64,6 +64,11 @@ class AdminToolsService {
       throw new ForbiddenException('Senha MASTER incorreta. Nada foi apagado.');
     }
 
+    // O que sobrevive ao reset (pedido do Erick): só admin ATIVO. Admin
+    // inativo é apagado igual qualquer outra pessoa — permite consolidar
+    // pra uma única conta antes de resetar, inativando as de teste.
+    const keepCondition = { role: UserRole.ADMIN, active: true };
+
     const counts = {
       pulseAnswer: await this.prisma.pulseAnswer.count(),
       pulseAiAnalysis: await this.prisma.pulseAiAnalysis.count(),
@@ -73,7 +78,7 @@ class AdminToolsService {
       pulseCycle: await this.prisma.pulseCycle.count(),
       feedback: await this.prisma.feedback.count(),
       notification: await this.prisma.notification.count(),
-      usersRemoved: await this.prisma.user.count({ where: { role: { not: UserRole.ADMIN } } }),
+      usersRemoved: await this.prisma.user.count({ where: { NOT: keepCondition } }),
       area: await this.prisma.area.count(),
       position: await this.prisma.position.count(),
     };
@@ -92,8 +97,8 @@ class AdminToolsService {
 
     // Zera managerId antes de excluir — evita qualquer problema de FK
     // auto-referenciada (gestor apontando pra outro usuário sendo excluído).
-    await this.prisma.user.updateMany({ where: { role: { not: UserRole.ADMIN } }, data: { managerId: null } });
-    await this.prisma.user.deleteMany({ where: { role: { not: UserRole.ADMIN } } });
+    await this.prisma.user.updateMany({ where: { NOT: keepCondition }, data: { managerId: null } });
+    await this.prisma.user.deleteMany({ where: { NOT: keepCondition } });
 
     // Reforça a regra: admin nunca pertence a nenhuma área/cargo.
     await this.prisma.user.updateMany({

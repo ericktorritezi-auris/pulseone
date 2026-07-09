@@ -214,8 +214,11 @@ export class UsersService {
     const isSelf = target.id === requester.id;
 
     if (target.role === UserRole.ADMIN) {
-      if (!isSelf) {
-        throw new ForbiddenException('O cadastro do administrador só pode ser acessado por ele mesmo.');
+      // Só o próprio admin, OU outro admin (pedido do Erick: admin pode
+      // inativar/reativar outro admin — útil pra consolidar contas de
+      // teste antes do reset). Gestor continua sem acesso nenhum a admin.
+      if (!isSelf && requester.role !== UserRole.ADMIN) {
+        throw new ForbiddenException('O cadastro do administrador só pode ser acessado por ele mesmo ou por outro admin.');
       }
       return;
     }
@@ -246,11 +249,16 @@ export class UsersService {
   async findAll(requester: AuthUser) {
     // ADMIN vê TODO MUNDO — colaborador, gestor e qualquer outro admin
     // (regra explícita do Erick: admin sempre vê todos os cadastros).
-    // GESTOR vê COLABORADOR + o próprio cadastro de GESTOR, só da própria área.
+    // GESTOR vê COLABORADOR + o próprio cadastro de GESTOR, de TODAS as
+    // áreas em que atua (managedAreas — seção 5.25/5.28), não mais só a
+    // área principal.
     const where: any =
       requester.role === UserRole.ADMIN
         ? {}
-        : { areaId: requester.areaId, role: { in: [UserRole.COLABORADOR, UserRole.GESTOR] } };
+        : {
+            area: { gestoresAtuantes: { some: { id: requester.id } } },
+            role: { in: [UserRole.COLABORADOR, UserRole.GESTOR] },
+          };
 
     return this.prisma.user.findMany({
       where,
@@ -516,6 +524,16 @@ export class UsersService {
     return this.prisma.user.update({ where: { id }, data: { active: false } });
   }
 
+  // Reativação (pedido do Erick — não existia, só dava pra inativar).
+  // Mesma checagem de acesso do remove(), espelhada.
+  async reactivate(id: string, requester: AuthUser) {
+    const target = await this.prisma.user.findUniqueOrThrow({ where: { id } });
+
+    await this.assertCanAccessTarget(target, requester);
+
+    return this.prisma.user.update({ where: { id }, data: { active: true } });
+  }
+
   /**
    * REGRA DE NEGÓCIO (seção 5.19, pedido do Erick): só o ADMIN pode
    * redefinir a senha de QUALQUER pessoa (inclusive de outro gestor ou de
@@ -585,6 +603,13 @@ class UsersController {
   @Delete(':id')
   remove(@Param('id') id: string, @Req() req: { user: AuthUser }) {
     return this.usersService.remove(id, req.user);
+  }
+
+  @Roles(UserRole.ADMIN, UserRole.GESTOR)
+  @Audit(AuditAction.EDICAO)
+  @Patch(':id/reactivate')
+  reactivate(@Param('id') id: string, @Req() req: { user: AuthUser }) {
+    return this.usersService.reactivate(id, req.user);
   }
 
   // Só ADMIN — nem o gestor tem essa ação, mesmo podendo editar outros
