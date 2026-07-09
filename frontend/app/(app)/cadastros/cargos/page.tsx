@@ -3,14 +3,15 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { api } from '../../../../lib/api';
-import { Position } from '../../../../lib/types';
+import { Position, Area } from '../../../../lib/types';
 import { Drawer } from '../../../../components/shared/Drawer';
 import { StatusBadge } from '../../../../components/shared/StatusBadge';
 
-const emptyForm = { name: '', isManager: false };
+const emptyForm = { name: '', isManager: false, areaId: '' };
 
 export default function CargosPage() {
   const [positions, setPositions] = useState<Position[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -21,7 +22,12 @@ export default function CargosPage() {
   async function loadData() {
     setLoading(true);
     try {
-      setPositions(await api.get<Position[]>('/positions'));
+      const [positionsData, areasData] = await Promise.all([
+        api.get<Position[]>('/positions'),
+        api.get<Area[]>('/areas'),
+      ]);
+      setPositions(positionsData);
+      setAreas(areasData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar cargos.');
     } finally {
@@ -42,7 +48,7 @@ export default function CargosPage() {
 
   function openEdit(position: Position) {
     setEditingId(position.id);
-    setForm({ name: position.name, isManager: position.isManager });
+    setForm({ name: position.name, isManager: position.isManager, areaId: position.areaId });
     setError('');
     setDrawerOpen(true);
   }
@@ -82,7 +88,8 @@ export default function CargosPage() {
         <div>
           <h1 className="text-xl font-semibold text-p-primary-dark">Cargos</h1>
           <p className="text-sm text-p-neutral">
-            Cargos marcados como "é gestor" definem automaticamente quem tem acesso de gestão em cada área.
+            Cada cargo pertence a uma área. Cargos marcados como "é gestor" definem
+            automaticamente quem tem acesso de gestão naquela área.
           </p>
         </div>
         <button
@@ -99,6 +106,7 @@ export default function CargosPage() {
           <thead className="bg-slate-50 text-p-neutral text-xs uppercase">
             <tr>
               <th className="text-left px-4 py-3">Nome</th>
+              <th className="text-left px-4 py-3">Área</th>
               <th className="text-left px-4 py-3">É gestor?</th>
               <th className="text-right px-4 py-3">Ações</th>
             </tr>
@@ -106,17 +114,18 @@ export default function CargosPage() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={3} className="text-center py-8 text-p-neutral">Carregando...</td>
+                <td colSpan={4} className="text-center py-8 text-p-neutral">Carregando...</td>
               </tr>
             )}
             {!loading && positions.length === 0 && (
               <tr>
-                <td colSpan={3} className="text-center py-8 text-p-neutral">Nenhum cargo cadastrado ainda.</td>
+                <td colSpan={4} className="text-center py-8 text-p-neutral">Nenhum cargo cadastrado ainda.</td>
               </tr>
             )}
             {positions.map((position) => (
               <tr key={position.id} className="border-t border-slate-100">
                 <td className="px-4 py-3 font-medium text-p-primary-dark">{position.name}</td>
+                <td className="px-4 py-3 text-p-neutral">{position.area?.name ?? '—'}</td>
                 <td className="px-4 py-3">
                   <StatusBadge status={position.isManager ? 'ATIVO' : 'INATIVO'} />
                 </td>
@@ -138,6 +147,23 @@ export default function CargosPage() {
 
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title={editingId ? 'Editar Cargo' : 'Novo Cargo'}>
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-p-primary-dark mb-1">Área</label>
+            <select
+              required
+              value={form.areaId}
+              onChange={(e) => setForm({ ...form, areaId: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            >
+              <option value="">Selecione...</option>
+              {areas.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-p-primary-dark mb-1">Nome do Cargo</label>
             <input

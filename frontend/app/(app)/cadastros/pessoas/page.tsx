@@ -17,6 +17,7 @@ const emptyForm = {
   positionId: '',
   managerId: '',
   password: '',
+  asAdmin: false,
 };
 
 export default function PessoasPage() {
@@ -49,14 +50,12 @@ export default function PessoasPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const [peopleRes, areasRes, positionsRes] = await Promise.all([
+      const [peopleRes, areasRes] = await Promise.all([
         api.get<Person[]>('/users'),
         api.get<Area[]>('/areas'),
-        api.get<Position[]>('/positions'),
       ]);
       setPeople(peopleRes);
       setAreas(areasRes);
-      setPositions(positionsRes);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar dados.');
     } finally {
@@ -67,6 +66,20 @@ export default function PessoasPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Cargos agora pertencem a uma área (pedido do Erick) — o dropdown de
+  // Cargo é reativo à área efetiva, igual já acontecia com o de Gestor
+  // Direto. Sem área escolhida ainda, a lista fica vazia.
+  useEffect(() => {
+    if (!effectiveAreaId) {
+      setPositions([]);
+      return;
+    }
+    api
+      .get<Position[]>(`/positions?areaId=${effectiveAreaId}`)
+      .then(setPositions)
+      .catch(() => setPositions([]));
+  }, [effectiveAreaId]);
 
   // Recarrega a lista de possíveis gestores diretos sempre que a área
   // efetiva (do form ou fixa do gestor) muda — o gestor direto precisa
@@ -100,6 +113,7 @@ export default function PessoasPage() {
       positionId: person.positionId ?? '',
       managerId: person.managerId ?? '',
       password: '',
+      asAdmin: false,
     });
     setError('');
     setAdminNewPassword('');
@@ -134,12 +148,16 @@ export default function PessoasPage() {
           fullName: form.fullName,
           email: form.email,
           phone: form.phone,
-          positionId: form.positionId,
-          managerId: form.managerId || undefined,
           password: form.password,
-          // Se for gestor, o backend ignora isso de qualquer forma e usa a
-          // própria área — mandamos mesmo assim por clareza no payload.
-          areaId: isGestor ? user!.areaId : form.areaId,
+          ...(form.asAdmin
+            ? { asAdmin: true }
+            : {
+                positionId: form.positionId,
+                managerId: form.managerId || undefined,
+                // Se for gestor, o backend ignora isso de qualquer forma e usa
+                // a própria área — mandamos mesmo assim por clareza no payload.
+                areaId: isGestor ? user!.areaId : form.areaId,
+              }),
           ...(masterPasswordOverride ? { masterPasswordOverride } : {}),
         });
       }
@@ -343,7 +361,25 @@ export default function PessoasPage() {
             />
           </div>
 
-          {editingIsAdmin ? (
+          {!editingId && user?.role === 'ADMIN' && (
+            <label className="flex items-start gap-2 text-sm bg-slate-50 border border-slate-200 rounded-lg p-3">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={form.asAdmin}
+                onChange={(e) =>
+                  setForm({ ...form, asAdmin: e.target.checked, areaId: '', positionId: '', managerId: '' })
+                }
+              />
+              <span>
+                <b>Esta pessoa é administradora do sistema.</b> Admin não pertence a nenhuma
+                área/cargo — lembrando que ninguém é promovido a admin depois, só criado assim
+                desde o início.
+              </span>
+            </label>
+          )}
+
+          {editingIsAdmin || form.asAdmin ? (
             <p className="text-xs text-p-neutral bg-slate-50 border border-slate-200 rounded-lg p-3">
               Esta conta é <b>administrador</b> — não pertence a nenhuma área ou cargo (é uma
               entidade do sistema, não um colaborador da organização). Só é possível editar nome,
@@ -359,7 +395,7 @@ export default function PessoasPage() {
                   required
                   disabled={isGestor}
                   value={isGestor ? user!.areaId ?? '' : form.areaId}
-                  onChange={(e) => setForm({ ...form, areaId: e.target.value, managerId: '' })}
+                  onChange={(e) => setForm({ ...form, areaId: e.target.value, positionId: '', managerId: '' })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-100 disabled:text-p-neutral"
                 >
                   <option value="">Selecione...</option>

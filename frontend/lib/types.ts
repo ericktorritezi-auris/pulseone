@@ -25,6 +25,8 @@ export interface Position {
   id: string;
   name: string;
   isManager: boolean;
+  areaId: string;
+  area?: { name: string };
 }
 
 export interface ManagerOption {

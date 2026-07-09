@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, Injectable, Module } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, Injectable, Module } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -14,20 +14,33 @@ class PositionDto {
 
   @IsBoolean()
   isManager: boolean;
+
+  // Cargo agora pertence a uma área (pedido do Erick) — obrigatório em
+  // toda criação/edição, igual já acontece com User.areaId.
+  @IsString()
+  areaId: string;
 }
 
 @Injectable()
 class PositionsService {
   constructor(private prisma: PrismaService) {}
-  findAll() {
-    return this.prisma.position.findMany({ orderBy: { name: 'asc' } });
+
+  findAll(areaId?: string) {
+    return this.prisma.position.findMany({
+      where: areaId ? { areaId } : undefined,
+      include: { area: { select: { name: true } } },
+      orderBy: { name: 'asc' },
+    });
   }
+
   create(dto: PositionDto) {
     return this.prisma.position.create({ data: dto });
   }
+
   update(id: string, dto: PositionDto) {
     return this.prisma.position.update({ where: { id }, data: dto });
   }
+
   remove(id: string) {
     return this.prisma.position.delete({ where: { id } });
   }
@@ -38,10 +51,13 @@ class PositionsService {
 class PositionsController {
   constructor(private positionsService: PositionsService) {}
 
+  // ?areaId=X filtra os cargos por área — usado pelo dropdown de Cargo na
+  // tela de Pessoas, reativo à Área escolhida (mesmo padrão que já existe
+  // pro dropdown de Gestor Direto).
   @Roles(UserRole.ADMIN, UserRole.GESTOR)
   @Get()
-  findAll() {
-    return this.positionsService.findAll();
+  findAll(@Query('areaId') areaId?: string) {
+    return this.positionsService.findAll(areaId);
   }
 
   @Roles(UserRole.ADMIN)

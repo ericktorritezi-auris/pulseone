@@ -12,17 +12,19 @@ async function main() {
   });
 
   // Cargos — ao menos um isManager=true por área para validar a
-  // resolução dinâmica de gestor (Area + Position.isManager)
+  // resolução dinâmica de gestor (Area + Position.isManager). Cargo agora
+  // pertence a uma área (Position.areaId obrigatório) — a chave única
+  // passou a ser o par (name, areaId), não mais só o nome sozinho.
   const gerenteMarketing = await prisma.position.upsert({
-    where: { name: 'Gerente de Marketing' },
+    where: { name_areaId: { name: 'Gerente de Marketing', areaId: marketing.id } },
     update: {},
-    create: { name: 'Gerente de Marketing', isManager: true },
+    create: { name: 'Gerente de Marketing', isManager: true, areaId: marketing.id },
   });
 
   const analistaMarketing = await prisma.position.upsert({
-    where: { name: 'Analista de Marketing' },
+    where: { name_areaId: { name: 'Analista de Marketing', areaId: marketing.id } },
     update: {},
-    create: { name: 'Analista de Marketing', isManager: false },
+    create: { name: 'Analista de Marketing', isManager: false, areaId: marketing.id },
   });
 
   // Admin — seed obrigatório com troca de senha no 1º login. O admin NÃO

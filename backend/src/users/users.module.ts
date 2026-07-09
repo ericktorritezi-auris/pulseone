@@ -45,8 +45,12 @@ class CreateUserDto {
   @IsString()
   areaId?: string;
 
+  // Obrigatório em todo cadastro, EXCETO quando asAdmin=true (admin não
+  // tem cargo). Validado no service, não dá pra expressar isso só com
+  // decorators do class-validator.
+  @IsOptional()
   @IsString()
-  positionId: string;
+  positionId?: string;
 
   // Só tem efeito se quem está criando for ADMIN. GESTOR nunca pode criar admin.
   @IsOptional()
@@ -103,15 +107,18 @@ export class UsersService {
    * - GESTOR: automático quando o cargo (Position.isManager) é true.
    * - COLABORADOR: automático quando o cargo não é de gestão.
    */
-  private async resolveRole(positionId: string, creator: AuthUser, asAdmin?: boolean): Promise<UserRole> {
-    if (asAdmin) {
-      if (creator.role !== UserRole.ADMIN) {
-        throw new ForbiddenException('Apenas o administrador pode criar outro administrador.');
-      }
-      return UserRole.ADMIN;
-    }
-
+  /**
+   * Deriva o role a partir do cargo, e valida que o cargo escolhido
+   * pertence de fato à área escolhida (pedido do Erick — cargo agora é
+   * vinculado a uma área). O caminho de "asAdmin" nunca passa por aqui —
+   * é tratado como um branch totalmente separado em create(), já que
+   * admin não tem área nem cargo.
+   */
+  private async resolveRoleAndValidateArea(positionId: string, areaId: string): Promise<UserRole> {
     const position = await this.prisma.position.findUniqueOrThrow({ where: { id: positionId } });
+    if (position.areaId !== areaId) {
+      throw new ForbiddenException('O cargo selecionado não pertence à área escolhida.');
+    }
     return position.isManager ? UserRole.GESTOR : UserRole.COLABORADOR;
   }
 
@@ -281,8 +288,32 @@ export class UsersService {
   async create(dto: CreateUserDto, creator: AuthUser) {
     await this.assertEmailAvailable(dto.email, dto.masterPasswordOverride);
 
+    // ADMIN NUNCA É PROMOVIDO, SEMPRE É CRIADO (regra explícita do Erick):
+    // esse branch é o ÚNICO jeito de alguém virar admin no sistema — não
+    // existe caminho de promoção via update(). Admin não pertence a
+    // nenhuma área/cargo, então nem tenta resolver isso aqui.
+    if (dto.asAdmin) {
+      if (creator.role !== UserRole.ADMIN) {
+        throw new ForbiddenException('Apenas o administrador pode criar outro administrador.');
+      }
+      const passwordHash = await bcrypt.hash(dto.password, 10);
+      return this.prisma.user.create({
+        data: {
+          fullName: dto.fullName,
+          email: dto.email,
+          phone: dto.phone,
+          role: UserRole.ADMIN,
+          passwordHash,
+        },
+      });
+    }
+
     const areaId = this.resolveAreaId(dto.areaId, creator);
-    const role = await this.resolveRole(dto.positionId, creator, dto.asAdmin);
+
+    if (!dto.positionId) {
+      throw new ForbiddenException('Cargo é obrigatório pra cadastro que não seja de administrador.');
+    }
+    const role = await this.resolveRoleAndValidateArea(dto.positionId, areaId);
     const managerId = await this.resolveManagerId(dto.managerId, areaId);
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
@@ -317,8 +348,7 @@ export class UsersService {
     managerId?: string;
     password: string;
   }) {
-    const position = await this.prisma.position.findUniqueOrThrow({ where: { id: dto.positionId } });
-    const role = position.isManager ? UserRole.GESTOR : UserRole.COLABORADOR;
+    const role = await this.resolveRoleAndValidateArea(dto.positionId, dto.areaId);
     const managerId = await this.resolveManagerId(dto.managerId, dto.areaId);
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
@@ -343,8 +373,9 @@ export class UsersService {
     return this.prisma.area.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } });
   }
 
-  findPublicPositions() {
+  findPublicPositions(areaId: string) {
     return this.prisma.position.findMany({
+      where: { areaId },
       select: { id: true, name: true, isManager: true },
       orderBy: { name: 'asc' },
     });
@@ -375,9 +406,30 @@ export class UsersService {
 
     const data: any = { ...dto };
 
-    // Se o cargo mudou, o role é recalculado automaticamente (fonte única de verdade).
+    // Trocou a ÁREA mas não mandou um cargo novo junto? Precisa garantir
+    // que o cargo ATUAL da pessoa ainda pertence à área nova — senão fica
+    // um cargo "órfão" de outra área. Exige escolher um cargo novo junto
+    // nesse caso (pedido do Erick).
+    if (dto.areaId && dto.areaId !== target.areaId && !dto.positionId) {
+      const currentPosition = target.positionId
+        ? await this.prisma.position.findUnique({ where: { id: target.positionId } })
+        : null;
+      if (!currentPosition || currentPosition.areaId !== dto.areaId) {
+        throw new ForbiddenException(
+          'Ao trocar a área, é preciso escolher um cargo que pertença à área nova.',
+        );
+      }
+    }
+
+    // Se o cargo mudou, o role é recalculado automaticamente (fonte única
+    // de verdade) — e valida que o cargo pertence à área EFETIVA da
+    // pessoa (a nova, se mudou; senão a que ela já tinha).
     if (dto.positionId) {
-      data.role = await this.resolveRole(dto.positionId, requester, false);
+      const effectiveAreaId = dto.areaId ?? target.areaId;
+      if (!effectiveAreaId) {
+        throw new ForbiddenException('Não é possível definir cargo sem uma área vinculada.');
+      }
+      data.role = await this.resolveRoleAndValidateArea(dto.positionId, effectiveAreaId);
     }
 
     if ('managerId' in dto) {
@@ -490,8 +542,8 @@ class PublicUsersController {
   }
 
   @Get('positions')
-  findPositions() {
-    return this.usersService.findPublicPositions();
+  findPositions(@Query('areaId') areaId: string) {
+    return this.usersService.findPublicPositions(areaId);
   }
 
   @Get('managers')

@@ -32,17 +32,19 @@ export default function CadastroPage() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      api.get<PublicOption[]>('/public/areas').then(setAreas),
-      api.get<PublicOption[]>('/public/positions').then(setPositions),
-    ]).catch(() => {});
+    api.get<PublicOption[]>('/public/areas').then(setAreas).catch(() => {});
   }, []);
 
   useEffect(() => {
     if (!form.areaId) {
+      setPositions([]);
       setManagers([]);
       return;
     }
+    api
+      .get<PublicOption[]>(`/public/positions?areaId=${form.areaId}`)
+      .then(setPositions)
+      .catch(() => setPositions([]));
     api
       .get<PublicOption[]>(`/public/managers?areaId=${form.areaId}`)
       .then(setManagers)
@@ -132,7 +134,7 @@ export default function CadastroPage() {
               <select
                 required
                 value={form.areaId}
-                onChange={(e) => setForm({ ...form, areaId: e.target.value, managerId: '' })}
+                onChange={(e) => setForm({ ...form, areaId: e.target.value, positionId: '', managerId: '' })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
               >
                 <option value="">Selecione...</option>

@@ -110,15 +110,23 @@ model Area {
   id        String   @id @default(uuid())
   name      String   @unique
   users     User[]
+  positions Position[]
   createdAt DateTime @default(now())
 }
 
 model Position {
   id        String   @id @default(uuid())
-  name      String   @unique
+  name      String
   isManager Boolean  @default(false)
+  areaId    String
+  area      Area     @relation(fields: [areaId], references: [id])
   users     User[]
   createdAt DateTime @default(now())
+
+  // Nome único DENTRO da área, não mais globalmente — agora que cargo
+  // pertence a uma área, "Analista" pode existir em Marketing E em Vendas
+  // como cargos distintos, sem precisar escrever "Analista de X" toda vez.
+  @@unique([name, areaId])
 }
 
 // ==========================

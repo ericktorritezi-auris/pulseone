@@ -670,6 +670,22 @@ Login/registro continuam com gravação inline em `auth.service.ts` (já existia
 
 ⚠️ **Pendente de decisão do Erick (não implementado ainda):** o que fazer com o e-mail de abertura de ciclo/arquivamento pra quem está no topo da hierarquia (sem gestor direto) — hoje recebe normalmente, já que também participa do Pulse (só não tem parecer). Se fizer sentido diferente, é um ajuste pontual.
 
+### 5.24 Cargo vinculado a Área + criação de Admin via flag (pedido do Erick)
+
+**Cargo agora pertence a uma área.** `Position.areaId` obrigatório (relação com `Area`), unicidade de nome mudou de global pra `@@unique([name, areaId])` — "Analista" pode existir em Marketing E em Vendas como cargos distintos, sem precisar escrever "Analista de X" toda vez.
+
+**Migração pontual (mesma proteção usada nos casos anteriores):** `fix-position-area.js` roda antes do `db push`, vincula todos os cargos existentes à área Marketing (confirmado pelo Erick, já que a base de teste toda vai ser resetada em seguida). ⚠️ Remover a chamada do `start.js` assim que ele confirmar que os cargos aparecem certos.
+
+**Validação cruzada área↔cargo, em todo lugar que cadastra/edita pessoa:**
+- `resolveRoleAndValidateArea()` (substituiu `resolveRole()`) — valida que o cargo escolhido pertence de fato à área escolhida, em criação (admin/gestor), edição e autocadastro público.
+- Editar só a **área** de alguém, sem trocar o cargo junto: bloqueado se o cargo atual não pertencer à área nova — exige escolher um cargo novo junto.
+- Dropdown de Cargo (Pessoas e Autocadastro) agora é **reativo à Área**, mesmo padrão que já existia pro dropdown de Gestor Direto — `GET /positions?areaId=X` e `GET /public/positions?areaId=X`.
+- Tela de Cargos ganhou a coluna "Área" + campo obrigatório no formulário.
+
+**Admin: sempre criado, nunca promovido (regra explícita do Erick).** Checkbox "Esta pessoa é administradora do sistema" — visível só na **criação**, só pra quem está logado como `ADMIN` (nunca aparece pro gestor, nunca aparece na edição). Quando marcado, esconde Área/Cargo/Gestor Direto e manda `asAdmin: true`. Backend: `create()` tratou isso como um branch **totalmente separado** do fluxo normal — nunca toca em `resolveAreaId`/`resolveRoleAndValidateArea`, já que admin não tem nenhum dos dois. Não existe (e não deve existir) caminho de promoção via `update()`.
+
+**Confirmado, sem necessidade de mudança:** "admins são pares" já era verdade na arquitetura — `PulseCycle` não tem nenhum campo amarrando o ciclo a um admin específico, e todas as ações do ciclo são protegidas só por `@Roles(ADMIN)` (papel, não identidade). Qualquer admin pode continuar de onde outro parou, em qualquer etapa.
+
 ### 5.16 Sprint 6 — parte 1: Autocadastro, Admin sem departamento, Reset gated e Manual do Usuário
 
 **Autocadastro público (pedido do Erick):** `POST /auth/register` — o funcionário cria a própria conta sem depender de admin/gestor. Escolhe livremente área e cargo (o `role` continua sendo derivado do cargo, nunca escolhido livremente, e nunca pode virar ADMIN por essa via). Dispara o e-mail de verificação automaticamente (fluxo que existia desde a Sprint 0, mas nunca tinha sido conectado a um cadastro real até agora). Rotas públicas novas (`/public/areas`, `/public/positions`, `/public/managers`) alimentam os selects do formulário antes da pessoa ter conta. Tela `/cadastro` (fora do layout autenticado) + link "Cadastre-se" na tela de login.

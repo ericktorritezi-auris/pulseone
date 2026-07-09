@@ -24,6 +24,12 @@ try {
   // existem linhas usando o valor removido.
   execSync('node prisma/fix-legacy-enum.js', { cwd: backendDir, stdio: 'inherit' });
 
+  // MIGRAÇÃO PONTUAL (pedido do Erick): vincula todos os cargos existentes
+  // à área Marketing, já que Position.areaId virou obrigatório.
+  // ⚠️ REMOVER esta chamada assim que o Erick confirmar que os cargos
+  // aparecem certos na tela de Cargos — não precisa rodar de novo depois.
+  execSync('node prisma/fix-position-area.js', { cwd: backendDir, stdio: 'inherit' });
+
   execSync('npx prisma db push --accept-data-loss --skip-generate', {
     cwd: backendDir,
     stdio: 'inherit',
