@@ -458,17 +458,20 @@ export class UsersService {
       where: { role: UserRole.GESTOR, active: true },
       select: { id: true, fullName: true, managedAreas: { select: { id: true, name: true } } },
     });
-    this.logger.warn(
-      `[DIAGNÓSTICO] areaId pedida: ${areaId} (${areaPedida?.name ?? 'NÃO ENCONTRADA'}) | gestores ativos: ${JSON.stringify(
-        todosGestores.map((g) => ({ nome: g.fullName, areas: g.managedAreas.map((a) => `${a.name}(${a.id})`) })),
-      )}`,
-    );
 
-    return this.prisma.user.findMany({
+    const resultado = await this.prisma.user.findMany({
       where: { managedAreas: { some: { id: areaId } }, role: UserRole.GESTOR, active: true },
       select: { id: true, fullName: true },
       orderBy: { fullName: 'asc' },
     });
+
+    this.logger.warn(
+      `[DIAGNÓSTICO] areaId pedida: ${areaId} (${areaPedida?.name ?? 'NÃO ENCONTRADA'}) | gestores ativos: ${JSON.stringify(
+        todosGestores.map((g) => ({ nome: g.fullName, areas: g.managedAreas.map((a) => `${a.name}(${a.id})`) })),
+      )} | RESULTADO DA CONSULTA FILTRADA: ${JSON.stringify(resultado)}`,
+    );
+
+    return resultado;
   }
 
   async update(id: string, dto: UpdateUserDto, requester: AuthUser) {
