@@ -744,6 +744,22 @@ Confirmado com o Erick: `RESEND_API_KEY` estava configurada no Railway, mas `RES
 
 Ao testar o reset de verdade pela primeira vez depois da seção 5.24 (cargo vinculado a área), apareceu um erro real: `prisma.area.deleteMany()` tentava apagar Área **antes** de Cargo — mas `Position.areaId` é uma FK obrigatória pra `Area`, e o Postgres recusa apagar uma área ainda referenciada (`violates RESTRICT setting of foreign key constraint`). Corrigido: Cargo é apagado **antes** de Área (filho antes do pai, mesmo princípio já usado no resto da ordem de exclusão do reset).
 
+### 5.32 Correção — seed recriava área/cargo de exemplo em todo boot, atrapalhando o reset pra produção
+
+O Erick reportou: depois de rodar o reset, tudo que ele apagava (área "Marketing" + os 2 cargos de exemplo) **voltava** no próximo deploy. Causa: o `seed.ts` roda em **todo boot** (é idempotente de propósito, pra sempre garantir uma base mínima) — e tinha um `upsert` recriando a área "Marketing" e os cargos "Gerente de Marketing"/"Analista de Marketing" sempre que não existiam, o que fazia sentido durante os testes, mas não depois que o reset é pra deixar a base **realmente** limpa antes de produção.
+
+**Correção:** removida a criação de área/cargo de exemplo do `seed.ts` — ele agora garante só o mínimo indispensável: o admin (existente ou criado do zero) e as 5 perguntas oficiais do PRD. Área e Cargo passam a ser **inteiramente** responsabilidade do admin cadastrar, sem nenhum dado de exemplo pré-criado.
+
+### 5.33 Correção — gestor "sumia" do dropdown de Gestor Direto no autocadastro (cache, não bug de query)
+
+Depois de descartar várias hipóteses (área única, erro de gravação, erro na consulta), a causa real apareceu no próprio log de HTTP do Railway que o Erick mandou: `/api/public/managers` retornava **304 (Not Modified)** repetidamente — o navegador estava reaproveitando uma resposta **em cache**, de antes do gestor ter sido editado com as áreas extras, em vez de perguntar de novo pro servidor. As rotas autenticadas (`/users/managers`, usadas pelo Cadastro de Pessoas do admin) nunca fizeram isso, por isso só o autocadastro público apresentava o sintoma.
+
+**Correção:** `@Header('Cache-Control', 'no-store')` nas 3 rotas públicas (`/public/areas`, `/public/positions`, `/public/managers`) — impede qualquer cache do navegador nelas, garantindo que sempre reflitam o estado atual do banco.
+
+### 5.31 Correção — botão "Sair" inacessível no mobile
+
+Depois de testar o menu deslizante mobile (seção 5.28) na prática, o Erick reportou que o botão "Sair" ficava fora da área visível da tela. Causa: `h-screen` (`100vh`) não bate com a altura real da viewport em navegadores mobile (a barra de endereço/rodapé "come" parte desse espaço) — e o `Sidebar` já usava `fixed inset-y-0`, que sozinho já estica corretamente do topo ao fim da tela real, tornando o `h-screen` redundante e problemático. Corrigido: removida a classe `h-screen`; adicionado `min-h-0` no menu de navegação (evita que ele "empurre" o rodapé mesmo com `flex-1`) e `shrink-0` no botão Sair (nunca é comprimido pelo flexbox). Nenhuma mudança no desktop.
+
 ### 5.16 Sprint 6 — parte 1: Autocadastro, Admin sem departamento, Reset gated e Manual do Usuário
 
 **Autocadastro público (pedido do Erick):** `POST /auth/register` — o funcionário cria a própria conta sem depender de admin/gestor. Escolhe livremente área e cargo (o `role` continua sendo derivado do cargo, nunca escolhido livremente, e nunca pode virar ADMIN por essa via). Dispara o e-mail de verificação automaticamente (fluxo que existia desde a Sprint 0, mas nunca tinha sido conectado a um cadastro real até agora). Rotas públicas novas (`/public/areas`, `/public/positions`, `/public/managers`) alimentam os selects do formulário antes da pessoa ter conta. Tela `/cadastro` (fora do layout autenticado) + link "Cadastre-se" na tela de login.

@@ -5,6 +5,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  Header,
   NotFoundException,
   Param,
   Patch,
@@ -624,20 +625,30 @@ class UsersController {
 
 // Rotas públicas (sem autenticação) — só leitura, só o necessário pro
 // formulário de autocadastro popular área/cargo/gestor antes de logar.
+//
+// @Header('Cache-Control', 'no-store') em todas as rotas: sem isso, o
+// navegador guardava a resposta em cache e reaproveitava (HTTP 304) mesmo
+// depois de dados mudarem no banco — foi exatamente a causa do gestor
+// "sumir" do dropdown depois de editado (o navegador mostrava a resposta
+// antiga, de antes da edição). Rotas autenticadas (com token) não têm
+// esse problema, por isso só o autocadastro público apresentava isso.
 @Controller('public')
 class PublicUsersController {
   constructor(private usersService: UsersService) {}
 
+  @Header('Cache-Control', 'no-store')
   @Get('areas')
   findAreas() {
     return this.usersService.findPublicAreas();
   }
 
+  @Header('Cache-Control', 'no-store')
   @Get('positions')
   findPositions(@Query('areaId') areaId: string) {
     return this.usersService.findPublicPositions(areaId);
   }
 
+  @Header('Cache-Control', 'no-store')
   @Get('managers')
   findManagers(@Query('areaId') areaId: string) {
     return this.usersService.findPublicManagers(areaId);
