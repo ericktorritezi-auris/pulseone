@@ -6,7 +6,6 @@ import {
   ForbiddenException,
   Get,
   Header,
-  Logger,
   NotFoundException,
   Param,
   Patch,
@@ -113,8 +112,6 @@ class SetPasswordDto {
 
 @Injectable()
 export class UsersService {
-  private readonly logger = new Logger(UsersService.name);
-
   constructor(private prisma: PrismaService) {}
 
   /**
@@ -447,31 +444,12 @@ export class UsersService {
     });
   }
 
-  async findPublicManagers(areaId: string) {
-    // 🔎 LOG TEMPORÁRIO DE DIAGNÓSTICO — remover depois de resolver o caso
-    // do gestor "sumindo" do dropdown do autocadastro. Mostra a área
-    // pedida e TODOS os gestores ativos com as áreas reais que cada um
-    // tem vinculadas, lado a lado — pra enxergar de cara se é uma
-    // divergência de id/nome, ou se realmente não há vínculo nenhum.
-    const areaPedida = await this.prisma.area.findUnique({ where: { id: areaId } });
-    const todosGestores = await this.prisma.user.findMany({
-      where: { role: UserRole.GESTOR, active: true },
-      select: { id: true, fullName: true, managedAreas: { select: { id: true, name: true } } },
-    });
-
-    const resultado = await this.prisma.user.findMany({
+  findPublicManagers(areaId: string) {
+    return this.prisma.user.findMany({
       where: { managedAreas: { some: { id: areaId } }, role: UserRole.GESTOR, active: true },
       select: { id: true, fullName: true },
       orderBy: { fullName: 'asc' },
     });
-
-    this.logger.warn(
-      `[DIAGNÓSTICO] areaId pedida: ${areaId} (${areaPedida?.name ?? 'NÃO ENCONTRADA'}) | gestores ativos: ${JSON.stringify(
-        todosGestores.map((g) => ({ nome: g.fullName, areas: g.managedAreas.map((a) => `${a.name}(${a.id})`) })),
-      )} | RESULTADO DA CONSULTA FILTRADA: ${JSON.stringify(resultado)}`,
-    );
-
-    return resultado;
   }
 
   async update(id: string, dto: UpdateUserDto, requester: AuthUser) {

@@ -10,6 +10,13 @@ interface PublicOption {
   isManager?: boolean;
 }
 
+// Gestor tem uma forma diferente das outras opções públicas (área/cargo):
+// o backend retorna `fullName`, não `name` — por isso um tipo separado.
+interface PublicManagerOption {
+  id: string;
+  fullName: string;
+}
+
 const emptyForm = {
   fullName: '',
   email: '',
@@ -25,7 +32,7 @@ export default function CadastroPage() {
   const router = useRouter();
   const [areas, setAreas] = useState<PublicOption[]>([]);
   const [positions, setPositions] = useState<PublicOption[]>([]);
-  const [managers, setManagers] = useState<PublicOption[]>([]);
+  const [managers, setManagers] = useState<PublicManagerOption[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -46,7 +53,7 @@ export default function CadastroPage() {
       .then(setPositions)
       .catch(() => setPositions([]));
     api
-      .get<PublicOption[]>(`/public/managers?areaId=${form.areaId}`)
+      .get<PublicManagerOption[]>(`/public/managers?areaId=${form.areaId}`)
       .then(setManagers)
       .catch(() => setManagers([]));
   }, [form.areaId]);
@@ -176,7 +183,7 @@ export default function CadastroPage() {
                 <option value="">Nenhum / não sei</option>
                 {managers.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.name}
+                    {m.fullName}
                   </option>
                 ))}
               </select>

@@ -756,6 +756,16 @@ Depois de descartar várias hipóteses (área única, erro de gravação, erro n
 
 **Correção:** `@Header('Cache-Control', 'no-store')` nas 3 rotas públicas (`/public/areas`, `/public/positions`, `/public/managers`) — impede qualquer cache do navegador nelas, garantindo que sempre reflitam o estado atual do banco.
 
+### 5.34 Causa raiz real, definitiva — gestor "sumia" do dropdown do autocadastro (bug de nome de campo, não de dado)
+
+Depois de eliminar cache e confirmar (via log de diagnóstico temporário, removido depois) que a consulta filtrada **retornava certo** (`RESULTADO DA CONSULTA FILTRADA: [{"id":"...","fullName":"Erick Torritezi"}]`), a causa real apareceu: **o backend sempre esteve certo** — o bug era só no **frontend do autocadastro**.
+
+`PublicOption` (tipo usado no autocadastro pra área/cargo/gestor) espera um campo `name` — que bate certinho pra área e cargo, mas o backend de gestores retorna `fullName` (mesmo formato que o `ManagerOption` já usado, corretamente, no Cadastro de Pessoas autenticado). O autocadastro reaproveitava `PublicOption` também pros gestores, e a tela renderizava `{m.name}` — que vinha `undefined`. O `<option>` existia no DOM, só que com o texto **em branco**, parecendo visualmente que não havia gestor nenhum pra escolher.
+
+**Correção:** criado `PublicManagerOption` (tipo separado, com `fullName`), e a renderização do dropdown corrigida pra `{m.fullName}`.
+
+**Lição:** um bug de "dado sumindo" pode não estar em nenhuma das duas pontas óbvias (query ou cache) — vale sempre confirmar com um log comparativo antes de assumir causa, em vez de ficar só relendo código.
+
 ### 5.31 Correção — botão "Sair" inacessível no mobile
 
 Depois de testar o menu deslizante mobile (seção 5.28) na prática, o Erick reportou que o botão "Sair" ficava fora da área visível da tela. Causa: `h-screen` (`100vh`) não bate com a altura real da viewport em navegadores mobile (a barra de endereço/rodapé "come" parte desse espaço) — e o `Sidebar` já usava `fixed inset-y-0`, que sozinho já estica corretamente do topo ao fim da tela real, tornando o `h-screen` redundante e problemático. Corrigido: removida a classe `h-screen`; adicionado `min-h-0` no menu de navegação (evita que ele "empurre" o rodapé mesmo com `flex-1`) e `shrink-0` no botão Sair (nunca é comprimido pelo flexbox). Nenhuma mudança no desktop.
