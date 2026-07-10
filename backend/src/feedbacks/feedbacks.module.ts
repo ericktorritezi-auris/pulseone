@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Injectable,
   Module,
@@ -42,9 +43,14 @@ class FeedbacksService {
   ) {}
 
   // Feedback Contínuo (PRD seção 13): pode ser enviado a qualquer momento,
-  // para qualquer pessoa ativa da organização — sem trava de área (diferente
-  // do Feedback Pulse, que é fechado por área). Decisão confirmada com Erick.
+  // entre qualquer COLABORADOR/GESTOR da organização — sem trava de área
+  // (diferente do Feedback Pulse, que é fechado por área). Admin nunca
+  // participa (nem envia, nem recebe) — mesma regra do Pulse (seção 5.7),
+  // agora estendida ao Feedback Contínuo por pedido do Erick.
   async create(dto: CreateFeedbackDto, sender: AuthUser) {
+    if (sender.role === UserRole.ADMIN) {
+      throw new ForbiddenException('Administrador não participa de feedback contínuo.');
+    }
     if (dto.receiverId === sender.id) {
       throw new BadRequestException('Não é possível enviar feedback para si mesmo.');
     }
@@ -52,6 +58,9 @@ class FeedbacksService {
     const receiver = await this.prisma.user.findUnique({ where: { id: dto.receiverId } });
     if (!receiver || !receiver.active) {
       throw new NotFoundException('Destinatário não encontrado ou inativo.');
+    }
+    if (receiver.role === UserRole.ADMIN) {
+      throw new ForbiddenException('Administrador não participa de feedback contínuo.');
     }
 
     const created = await this.prisma.feedback.create({
@@ -124,9 +133,14 @@ class FeedbacksService {
   // trava de área), então qualquer usuário autenticado precisa enxergar a
   // lista básica de possíveis destinatários — diferente de /users, que é
   // restrito a ADMIN/GESTOR.
+  // Feedback Contínuo é livre entre COLABORADOR/GESTOR (sem trava de área),
+  // então qualquer usuário autenticado precisa enxergar a lista básica de
+  // possíveis destinatários — diferente de /users, que é restrito a
+  // ADMIN/GESTOR. Admin nunca aparece aqui — não participa (nem envia,
+  // nem recebe) feedback contínuo.
   findRecipients(excludeUserId: string) {
     return this.prisma.user.findMany({
-      where: { active: true, id: { not: excludeUserId } },
+      where: { active: true, id: { not: excludeUserId }, role: { not: UserRole.ADMIN } },
       select: { id: true, fullName: true, area: { select: { name: true } } },
       orderBy: { fullName: 'asc' },
     });

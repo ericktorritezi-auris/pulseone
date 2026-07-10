@@ -7,7 +7,7 @@ import { api } from '../../../../lib/api';
 interface Recipient {
   id: string;
   fullName: string;
-  area: { name: string };
+  area: { name: string } | null;
 }
 
 export default function NovoFeedbackPage() {
@@ -63,7 +63,7 @@ export default function NovoFeedbackPage() {
               <option value="">Selecione...</option>
               {recipients.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.fullName} — {r.area.name}
+                  {r.fullName}{r.area ? ` — ${r.area.name}` : ' — Administrador'}
                 </option>
               ))}
             </select>

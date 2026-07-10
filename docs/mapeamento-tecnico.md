@@ -795,6 +795,22 @@ Pedido explícito: nenhum texto visível ao usuário (telas, PDF, Landing Page, 
 
 Feedback Contínuo já disparava uma notificação in-app (sininho) ao ser recebido, mas nenhum e-mail. Adicionado `ResendService.sendContinuousFeedbackReceived` — dispara sempre que alguém recebe um Feedback Contínuo (que pode ser de/para qualquer pessoa ativa da organização, sem trava de área — diferente do Feedback Pulse), avisando quem enviou e convidando a acessar "Feedbacks Recebidos". Best-effort: uma falha de e-mail nunca impede o feedback de ser registrado (o dado principal já foi salvo com sucesso antes da tentativa de envio).
 
+### 5.38 Bug real em produção — tela de Enviar Feedback quebrava com o admin na lista de destinatários
+
+Primeiro erro pego já com colaboradores reais em uso: `TypeError: Cannot read properties of null (reading 'name')` na tela **Enviar Feedback**. Causa: `/feedbacks/recipients` retorna **todo mundo ativo**, admin incluso (Feedback Contínuo pode ser enviado/recebido por qualquer pessoa da organização, sem trava de área — seção 5.1) — e o admin não tem área (`area: null`, correto, seção 5.16). A tela assumia `r.area.name` sempre presente, sem checagem, e quebrava assim que a lista carregava (por isso o erro aparecia ~2 segundos depois de abrir, quando o fetch resolvia).
+
+**Correção:** acesso null-safe, mostrando "— Administrador" no lugar da área quando ela não existe. **Varredura completa feita em todo o frontend** por qualquer outro acesso desprotegido a `.area.name`/`.position.name`/`.manager.fullName` — nenhum outro caso encontrado; esse era isolado a essa tela específica.
+
+### 5.39 Admin removido do Feedback Contínuo (pedido do Erick — reforça a regra do Pulse)
+
+O bug da seção 5.38 expôs uma lacuna real de regra de negócio: o admin **podia** enviar/receber Feedback Contínuo — só não aparecia bem na tela por causa do bug de área nula. O Erick confirmou: admin nunca deveria participar disso, mesma lógica já aplicada ao Pulse (seção 5.7).
+
+**Correção com trava dupla:**
+- `findRecipients()`: admin excluído da lista de possíveis destinatários (`role: { not: ADMIN }`).
+- `create()`: bloqueia explicitamente se o remetente **ou** o destinatário for admin — mesmo que alguém tente contornar a lista de destinatários com uma chamada direta à API, o backend rejeita.
+
+O bug da seção 5.38 (área nula quebrando a tela) deixou de ser alcançável na prática agora (admin nunca mais aparece na lista), mas a correção de null-safety continua no código como proteção extra, sem custo.
+
 ### 5.31 Correção — botão "Sair" inacessível no mobile
 
 Depois de testar o menu deslizante mobile (seção 5.28) na prática, o Erick reportou que o botão "Sair" ficava fora da área visível da tela. Causa: `h-screen` (`100vh`) não bate com a altura real da viewport em navegadores mobile (a barra de endereço/rodapé "come" parte desse espaço) — e o `Sidebar` já usava `fixed inset-y-0`, que sozinho já estica corretamente do topo ao fim da tela real, tornando o `h-screen` redundante e problemático. Corrigido: removida a classe `h-screen`; adicionado `min-h-0` no menu de navegação (evita que ele "empurre" o rodapé mesmo com `flex-1`) e `shrink-0` no botão Sair (nunca é comprimido pelo flexbox). Nenhuma mudança no desktop.
