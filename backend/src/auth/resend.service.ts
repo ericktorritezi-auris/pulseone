@@ -120,4 +120,26 @@ export class ResendService {
       ],
     });
   }
+
+  /**
+   * E-mail de feedback avulso recebido (pedido do Erick): dispara sempre
+   * que alguém recebe um Feedback Contínuo — além da notificação in-app
+   * (sininho) que já existia. Pode ser enviado por qualquer pessoa da
+   * organização pra qualquer outra, sem trava de área.
+   */
+  async sendContinuousFeedbackReceived(to: string, receiverFullName: string, senderFullName: string) {
+    if (!this.resend) {
+      this.logger.warn(`Envio de e-mail de feedback recebido ignorado (Resend não configurado). Destinatário: ${to}`);
+      return null;
+    }
+    return this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: `Você recebeu um feedback de ${senderFullName}`,
+      html: `<p>Olá, ${receiverFullName.split(' ')[0]}!</p>
+             <p>Você acabou de receber um feedback de <b>${senderFullName}</b>.</p>
+             <p>Favor acessar o PulseOne para conferir e, se quiser, responder.</p>
+             <p><a href="${process.env.APP_URL}/feedbacks/recebidos">Ver meu feedback</a></p>`,
+    });
+  }
 }

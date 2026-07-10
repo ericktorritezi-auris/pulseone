@@ -22,7 +22,7 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
   EXCLUSAO: { bg: '#FEE2E2', text: '#EF4444', label: 'Exclusão' },
   FEEDBACK: { bg: '#DBEAFE', text: '#2563EB', label: 'Feedback' },
   FECHAMENTO: { bg: '#FEF3C7', text: '#F59E0B', label: 'Fechamento' },
-  GERACAO_IA: { bg: '#EDE9FE', text: '#7C3AED', label: 'Geração de IA' },
+  GERACAO_IA: { bg: '#EDE9FE', text: '#7C3AED', label: 'Análise Preditiva' },
   GERACAO_PDF: { bg: '#EDE9FE', text: '#7C3AED', label: 'Geração de PDF' },
 };
 

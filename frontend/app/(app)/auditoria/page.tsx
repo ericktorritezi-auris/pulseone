@@ -15,7 +15,7 @@ const ACTION_FILTERS = [
   { value: 'EXCLUSAO', label: 'Exclusão' },
   { value: 'FEEDBACK', label: 'Feedback' },
   { value: 'FECHAMENTO', label: 'Fechamento' },
-  { value: 'GERACAO_IA', label: 'Geração de IA' },
+  { value: 'GERACAO_IA', label: 'Análise Preditiva' },
   { value: 'GERACAO_PDF', label: 'Geração de PDF' },
 ];
 

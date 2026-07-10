@@ -54,7 +54,7 @@ const STEPS = [
   {
     n: '03',
     title: 'O gestor consolida',
-    text: 'Score calculado, análise por IA como apoio, e o parecer final escrito por quem acompanha de perto.',
+    text: 'Score calculado, análise preditiva como apoio, e o parecer final escrito por quem acompanha de perto.',
   },
   {
     n: '04',

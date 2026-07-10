@@ -13,6 +13,8 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { ResendService } from '../auth/resend.service';
+import { EmailModule } from '../email/email.module';
 import { UserRole, AuditAction } from '@prisma/client';
 import { IsInt, IsString, Max, Min, MinLength } from 'class-validator';
 
@@ -34,7 +36,10 @@ class CreateFeedbackDto {
 
 @Injectable()
 class FeedbacksService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private resend: ResendService,
+  ) {}
 
   // Feedback Contínuo (PRD seção 13): pode ser enviado a qualquer momento,
   // para qualquer pessoa ativa da organização — sem trava de área (diferente
@@ -66,6 +71,23 @@ class FeedbacksService {
         message: 'Você recebeu um novo feedback. Acesse "Feedbacks Recebidos" para ver.',
       },
     });
+
+    // E-mail (pedido do Erick, além da notificação in-app acima) —
+    // best-effort: uma falha de e-mail nunca pode impedir o feedback de
+    // ser registrado, já que o dado principal já foi salvo com sucesso.
+    try {
+      const senderUser = await this.prisma.user.findUnique({
+        where: { id: sender.id },
+        select: { fullName: true },
+      });
+      await this.resend.sendContinuousFeedbackReceived(
+        receiver.email,
+        receiver.fullName,
+        senderUser?.fullName ?? 'um colega',
+      );
+    } catch (err) {
+      console.error(`Falha ao enviar e-mail de feedback recebido para ${receiver.email}:`, err);
+    }
 
     return created;
   }
@@ -139,6 +161,7 @@ class FeedbacksController {
 }
 
 @Module({
+  imports: [EmailModule],
   controllers: [FeedbacksController],
   providers: [FeedbacksService],
   exports: [FeedbacksService],

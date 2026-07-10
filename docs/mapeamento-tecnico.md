@@ -776,6 +776,25 @@ Arquivos colocados na convenção de metadata do Next.js App Router (`app/favico
 
 **Correção no processo:** a primeira tentativa de gerar o `favicon.ico` multi-resolução (16/32/48px) só embutiu 1 tamanho — o parâmetro `append_images` do Pillow não funciona do jeito esperado pra ICO; o certo é passar uma imagem-base em resolução alta e deixar o parâmetro `sizes` reamostrar internamente. Corrigido e conferido de verdade (`img.info.get('sizes')` confirmando os 3 tamanhos presentes) antes de entregar.
 
+### 5.36 "Análise Preditiva do Colaborador" — remoção de toda menção visível a IA (pedido do Erick, fechamento pra produção)
+
+Pedido explícito: nenhum texto visível ao usuário (telas, PDF, Landing Page, Manual, mensagens de erro exibidas) deve deixar evidente que a análise é gerada por IA — o objetivo é que o colaborador nunca sinta que "ninguém olha de perto, é tudo automático".
+
+**Renomeado (texto visível):**
+- "Análise de IA" → **"Análise Preditiva do Colaborador"** (título da seção no relatório)
+- "Gerar análise IA" → **"Gerar análise"** (botão)
+- "Usar parecer sugerido pela IA como ponto de partida" → **"Usar análise sugerida para o parecer"**
+- Landing Page, Auditoria, `StatusBadge`, Manual do Usuário — mesmo ajuste replicado em cada um
+- Mensagens de log de erro do backend (`anthropic.service.ts`) — removida a palavra "Anthropic" das mensagens de erro; o texto de fallback (que pode aparecer na tela se a integração não estiver configurada) não menciona mais "IA" nem o nome da variável de ambiente
+
+**Deliberadamente não renomeado** (nunca visível a ninguém fora do desenvolvimento, mudar exigiria migração de banco sem ganho real): nome do model do Prisma (`PulseAiAnalysis`), campo (`aiAnalysis`), classe (`AnthropicService`), valor do enum de auditoria (`GERACAO_IA` — só o *label* de exibição mudou), variável de ambiente (`ANTHROPIC_API_KEY`), comentários no código.
+
+**Achado no mapeamento (não era bug):** o PDF (baixado ou enviado por e-mail no arquivamento) nunca exibiu os campos da análise diretamente — só o parecer final escrito pelo gestor, que pode ter copiado da análise como base. Confirmado pelo Erick que esse é o fluxo esperado (analisa → copia pro parecer com as próprias palavras) — nenhum ajuste necessário no PDF.
+
+### 5.37 E-mail de feedback avulso recebido (pedido do Erick, junto no mesmo fechamento)
+
+Feedback Contínuo já disparava uma notificação in-app (sininho) ao ser recebido, mas nenhum e-mail. Adicionado `ResendService.sendContinuousFeedbackReceived` — dispara sempre que alguém recebe um Feedback Contínuo (que pode ser de/para qualquer pessoa ativa da organização, sem trava de área — diferente do Feedback Pulse), avisando quem enviou e convidando a acessar "Feedbacks Recebidos". Best-effort: uma falha de e-mail nunca impede o feedback de ser registrado (o dado principal já foi salvo com sucesso antes da tentativa de envio).
+
 ### 5.31 Correção — botão "Sair" inacessível no mobile
 
 Depois de testar o menu deslizante mobile (seção 5.28) na prática, o Erick reportou que o botão "Sair" ficava fora da área visível da tela. Causa: `h-screen` (`100vh`) não bate com a altura real da viewport em navegadores mobile (a barra de endereço/rodapé "come" parte desse espaço) — e o `Sidebar` já usava `fixed inset-y-0`, que sozinho já estica corretamente do topo ao fim da tela real, tornando o `h-screen` redundante e problemático. Corrigido: removida a classe `h-screen`; adicionado `min-h-0` no menu de navegação (evita que ele "empurre" o rodapé mesmo com `flex-1`) e `shrink-0` no botão Sair (nunca é comprimido pelo flexbox). Nenhuma mudança no desktop.

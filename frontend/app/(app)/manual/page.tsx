@@ -228,7 +228,7 @@ export default function ManualPage() {
                 <li>Clique no nome da pessoa em <b>Relatórios</b>.</li>
                 <li>Veja o score, o NPS e os comentários que ela recebeu.</li>
                 <li>
-                  Clique em <b>Gerar análise IA</b> se quiser uma sugestão automática de pontos
+                  Clique em <b>Gerar análise</b> se quiser uma sugestão automática de pontos
                   fortes, melhorias e um rascunho de parecer.
                 </li>
                 <li>Escreva (ou ajuste) o parecer final no campo de texto.</li>
@@ -321,7 +321,7 @@ export default function ManualPage() {
             <ManualSection icon={ScrollText} title="Auditoria">
               <p>
                 Registro de tudo que acontece no sistema — quem fez o quê e quando: login, logout,
-                cadastros, edições, exclusões, feedbacks, fechamentos de ciclo, geração de IA e de
+                cadastros, edições, exclusões, feedbacks, fechamentos de ciclo, geração de análises e de
                 PDF. Dá pra filtrar por tipo de ação.
               </p>
             </ManualSection>

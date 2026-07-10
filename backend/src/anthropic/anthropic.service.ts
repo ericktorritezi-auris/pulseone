@@ -59,7 +59,7 @@ export class AnthropicService {
       });
 
       if (!response.ok) {
-        this.logger.error(`Anthropic API retornou ${response.status}. Usando análise de fallback.`);
+        this.logger.error(`Falha ao gerar análise preditiva (status ${response.status}). Usando fallback.`);
         return this.fallbackAnalysis(input);
       }
 
@@ -76,7 +76,7 @@ export class AnthropicService {
         suggestedOpinion: parsed.suggestedOpinion ?? '',
       };
     } catch (err) {
-      this.logger.error(`Falha ao gerar análise via Anthropic: ${(err as Error).message}. Usando fallback.`);
+      this.logger.error(`Falha ao gerar análise preditiva: ${(err as Error).message}. Usando fallback.`);
       return this.fallbackAnalysis(input);
     }
   }
@@ -114,7 +114,7 @@ Com base nesses dados, responda APENAS com um JSON válido (sem markdown, sem te
       strengths: 'Não foi possível gerar a análise automática no momento. Revise os comentários recebidos manualmente.',
       improvements: 'Não foi possível gerar a análise automática no momento.',
       trends: 'Não foi possível gerar a análise automática no momento.',
-      summary: `Score final: ${input.finalScore.toFixed(1)} (${input.scoreBand}). Configure ANTHROPIC_API_KEY para habilitar a análise por IA.`,
+      summary: `Score final: ${input.finalScore.toFixed(1)} (${input.scoreBand}). Análise preditiva ainda não configurada no ambiente do servidor.`,
       suggestedOpinion: '',
     };
   }

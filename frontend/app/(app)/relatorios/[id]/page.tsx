@@ -191,11 +191,11 @@ export default function RelatorioDetalhePage() {
         )}
       </div>
 
-      {/* Análise de IA — só quem consolida vê/gera */}
+      {/* Análise Preditiva do Colaborador — só quem consolida vê/gera */}
       {canConsolidate && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-p-primary-dark">Análise de IA</h2>
+            <h2 className="text-sm font-semibold text-p-primary-dark">Análise Preditiva do Colaborador</h2>
             {!isFinalized && (
               <button
                 onClick={handleGenerateAi}
@@ -203,7 +203,7 @@ export default function RelatorioDetalhePage() {
                 className="flex items-center gap-1.5 text-xs font-medium bg-p-primary/10 text-p-primary px-3 py-1.5 rounded-lg hover:bg-p-primary/20 disabled:opacity-50"
               >
                 <Sparkles size={14} />
-                {generatingAi ? 'Gerando...' : report.aiAnalysis ? 'Regenerar análise' : 'Gerar análise IA'}
+                {generatingAi ? 'Gerando...' : report.aiAnalysis ? 'Regenerar análise' : 'Gerar análise'}
               </button>
             )}
           </div>
@@ -233,7 +233,7 @@ export default function RelatorioDetalhePage() {
                   onClick={() => setOpinion(report.aiAnalysis!.suggestedOpinion)}
                   className="text-xs text-p-primary hover:underline"
                 >
-                  Usar parecer sugerido pela IA como ponto de partida →
+                  Usar análise sugerida para o parecer →
                 </button>
               )}
             </div>
