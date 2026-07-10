@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '../lib/auth-context';
@@ -12,6 +12,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'PulseOne',
   description: 'Transformando percepções em desenvolvimento.',
+  manifest: '/site.webmanifest',
+};
+
+export const viewport: Viewport = {
+  themeColor: '#2563EB',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

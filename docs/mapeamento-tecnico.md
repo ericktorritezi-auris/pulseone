@@ -766,6 +766,16 @@ Depois de eliminar cache e confirmar (via log de diagnóstico temporário, remov
 
 **Lição:** um bug de "dado sumindo" pode não estar em nenhuma das duas pontas óbvias (query ou cache) — vale sempre confirmar com um log comparativo antes de assumir causa, em vez de ficar só relendo código.
 
+### 5.35 Favicon e ícones de app (iOS/Android) — pedido do Erick
+
+Duas variantes da marca (círculo + "P" + pontos orbitais, mesma assinatura da Landing Page — seção 5.28), pensadas pro tamanho de exibição de cada contexto:
+- **Simples** (só o degrade + "P" branco, sem os pontos): usada no favicon (16/32/48px) — os pontos ficariam ilegíveis nesse tamanho.
+- **Detalhada** (com o anel fino + os 4 pontos): usada nos ícones maiores (`apple-icon.png` 180px, `android-chrome-192x192.png`, `android-chrome-512x512.png`, `maskable-icon-512x512.png`) — espaço suficiente pra manter o detalhe reconhecível.
+
+Arquivos colocados na convenção de metadata do Next.js App Router (`app/favicon.ico`, `app/icon.png`, `app/apple-icon.png` — o Next detecta e injeta as tags `<link>` sozinho, sem precisar de código extra) + `public/site.webmanifest` (necessário pro Android reconhecer como app instalável, com o ícone "maskable" pra sobreviver a recortes em círculo/squircle) + `viewport.themeColor` no `layout.tsx`.
+
+**Correção no processo:** a primeira tentativa de gerar o `favicon.ico` multi-resolução (16/32/48px) só embutiu 1 tamanho — o parâmetro `append_images` do Pillow não funciona do jeito esperado pra ICO; o certo é passar uma imagem-base em resolução alta e deixar o parâmetro `sizes` reamostrar internamente. Corrigido e conferido de verdade (`img.info.get('sizes')` confirmando os 3 tamanhos presentes) antes de entregar.
+
 ### 5.31 Correção — botão "Sair" inacessível no mobile
 
 Depois de testar o menu deslizante mobile (seção 5.28) na prática, o Erick reportou que o botão "Sair" ficava fora da área visível da tela. Causa: `h-screen` (`100vh`) não bate com a altura real da viewport em navegadores mobile (a barra de endereço/rodapé "come" parte desse espaço) — e o `Sidebar` já usava `fixed inset-y-0`, que sozinho já estica corretamente do topo ao fim da tela real, tornando o `h-screen` redundante e problemático. Corrigido: removida a classe `h-screen`; adicionado `min-h-0` no menu de navegação (evita que ele "empurre" o rodapé mesmo com `flex-1`) e `shrink-0` no botão Sair (nunca é comprimido pelo flexbox). Nenhuma mudança no desktop.
