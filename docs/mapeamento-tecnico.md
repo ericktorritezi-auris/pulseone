@@ -811,6 +811,14 @@ O bug da seção 5.38 expôs uma lacuna real de regra de negócio: o admin **pod
 
 O bug da seção 5.38 (área nula quebrando a tela) deixou de ser alcançável na prática agora (admin nunca mais aparece na lista), mas a correção de null-safety continua no código como proteção extra, sem custo.
 
+### 5.40 Página de confirmação de e-mail — nunca tinha sido construída (404 real em produção)
+
+O backend tinha o endpoint (`POST /auth/verify-email/:token`) desde a Sprint 0, e o e-mail de verificação disparava certinho — mas **a página do frontend que deveria abrir ao clicar no link nunca foi criada**. Resultado: qualquer pessoa que se cadastrasse e clicasse no link do e-mail caía direto no 404 do Next.js.
+
+**Correção:** `app/verify-email/[token]/page.tsx` — chama o endpoint assim que a página carrega (sem precisar de nenhuma ação do usuário), mostra sucesso (com redirecionamento automático pro login) ou erro (token inválido/expirado, com aviso de que isso **não impede o login** — confirmado no código que `emailVerified` nunca é checado no fluxo de login).
+
+Conferidos também os outros 3 links usados em e-mails (reset de senha, abertura de ciclo, feedback recebido) — todos já tinham página correspondente; esse era o único gap.
+
 ### 5.31 Correção — botão "Sair" inacessível no mobile
 
 Depois de testar o menu deslizante mobile (seção 5.28) na prática, o Erick reportou que o botão "Sair" ficava fora da área visível da tela. Causa: `h-screen` (`100vh`) não bate com a altura real da viewport em navegadores mobile (a barra de endereço/rodapé "come" parte desse espaço) — e o `Sidebar` já usava `fixed inset-y-0`, que sozinho já estica corretamente do topo ao fim da tela real, tornando o `h-screen` redundante e problemático. Corrigido: removida a classe `h-screen`; adicionado `min-h-0` no menu de navegação (evita que ele "empurre" o rodapé mesmo com `flex-1`) e `shrink-0` no botão Sair (nunca é comprimido pelo flexbox). Nenhuma mudança no desktop.
