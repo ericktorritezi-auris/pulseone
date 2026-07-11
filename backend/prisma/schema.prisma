@@ -103,6 +103,7 @@ model User {
   pulseReports            PulseReport[]           @relation("ReportOwner")
   notifications           Notification[]
   auditLogs               AuditLog[]
+  systemNpsParticipations SystemNpsParticipation[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
 
@@ -309,4 +310,46 @@ model AuditLog {
   entityId  String?
   metadata  Json?
   createdAt DateTime    @default(now())
+}
+
+// ==========================
+// NPS DO SISTEMA (não confundir com o NPS de pessoas, dentro do Pulse)
+// ==========================
+
+// Cada "disparo" de pesquisa pelo admin. Não guarda quem disparou por
+// simplicidade — só importa QUANDO, pra saber qual é "a mais recente".
+model SystemNpsCampaign {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  participations SystemNpsParticipation[]
+  responses      SystemNpsResponse[]
+}
+
+// Só registra QUE a pessoa já respondeu a campanha X — nunca o que ela
+// respondeu. Existe só pra decidir "mostro o modal de novo ou não" no
+// próximo login. "Agora não" nunca gera uma linha aqui (pedido do Erick:
+// só Enviar "resolve" a pessoa pra aquela campanha).
+model SystemNpsParticipation {
+  id          String            @id @default(uuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id])
+  campaignId  String
+  campaign    SystemNpsCampaign @relation(fields: [campaignId], references: [id])
+  respondedAt DateTime          @default(now())
+
+  @@unique([userId, campaignId])
+}
+
+// A resposta em si — DE PROPÓSITO sem nenhum campo de usuário. Ninguém,
+// nem admin, nem com acesso direto ao banco, consegue ligar uma resposta
+// a uma pessoa específica. campaignId é só contexto de quando foi
+// coletada, não identifica ninguém.
+model SystemNpsResponse {
+  id         String             @id @default(uuid())
+  score      Int
+  comment    String?
+  campaignId String?
+  campaign   SystemNpsCampaign? @relation(fields: [campaignId], references: [id])
+  createdAt  DateTime           @default(now())
 }

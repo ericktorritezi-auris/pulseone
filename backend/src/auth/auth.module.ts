@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { EmailModule } from '../email/email.module';
+import { SystemNpsModule } from '../system-nps/system-nps.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { EmailModule } from '../email/email.module';
     }),
     UsersModule,
     EmailModule,
+    SystemNpsModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

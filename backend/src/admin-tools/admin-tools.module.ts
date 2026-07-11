@@ -81,9 +81,13 @@ class AdminToolsService {
       usersRemoved: await this.prisma.user.count({ where: { NOT: keepCondition } }),
       area: await this.prisma.area.count(),
       position: await this.prisma.position.count(),
+      systemNpsResponse: await this.prisma.systemNpsResponse.count(),
     };
 
     await this.prisma.pulseAnswer.deleteMany({});
+    await this.prisma.systemNpsResponse.deleteMany({});
+    await this.prisma.systemNpsParticipation.deleteMany({});
+    await this.prisma.systemNpsCampaign.deleteMany({});
     await this.prisma.pulseAiAnalysis.deleteMany({});
     await this.prisma.pulseFeedback.deleteMany({});
     await this.prisma.pulseScore.deleteMany({});

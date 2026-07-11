@@ -16,6 +16,7 @@ import { AnthropicModule } from './anthropic/anthropic.module';
 import { AdminToolsModule } from './admin-tools/admin-tools.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { SystemNpsModule } from './system-nps/system-nps.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
     AnthropicModule,
     AdminToolsModule,
     AuditLogsModule,
+    SystemNpsModule,
   ],
   providers: [
     {

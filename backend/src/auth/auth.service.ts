@@ -5,6 +5,7 @@ import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ResendService } from './resend.service';
 import { UsersService } from '../users/users.module';
+import { SystemNpsService } from '../system-nps/system-nps.module';
 import { AuditAction } from '@prisma/client';
 
 @Injectable()
@@ -14,6 +15,7 @@ export class AuthService {
     private jwt: JwtService,
     private resend: ResendService,
     private usersService: UsersService,
+    private systemNps: SystemNpsService,
   ) {}
 
   /**
@@ -82,9 +84,15 @@ export class AuthService {
 
     const accessToken = this.jwt.sign({ sub: user.id, role: user.role });
 
+    // NPS do sistema (pedido do Erick): checa se existe campanha ativa que
+    // essa pessoa ainda não respondeu — admin nunca participa (já tratado
+    // dentro do próprio service).
+    const pendingSystemNps = await this.systemNps.hasPendingSurvey(user.id, user.role);
+
     return {
       accessToken,
       mustChangePwd: user.mustChangePwd,
+      pendingSystemNps,
       user: {
         id: user.id,
         fullName: user.fullName,
