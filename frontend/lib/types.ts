@@ -13,6 +13,7 @@ export interface AuthUser {
 export interface LoginResponse {
   accessToken: string;
   mustChangePwd: boolean;
+  pendingSystemNps?: boolean;
   user: AuthUser;
 }
 
@@ -217,4 +218,20 @@ export interface AuditLogEntry {
   entityId: string | null;
   createdAt: string;
   user: { fullName: string; email: string } | null;
+}
+
+export interface SystemNpsCampaignStatus {
+  active: boolean;
+  createdAt: string | null;
+  totalElegiveis: number;
+  totalResponderam: number;
+}
+
+export interface SystemNpsSummary {
+  total: number;
+  promoters: number;
+  passives: number;
+  detractors: number;
+  npsScore: number;
+  comments: { id: string; score: number; comment: string; createdAt: string }[];
 }

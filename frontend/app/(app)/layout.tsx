@@ -6,6 +6,7 @@ import { useAuth } from '../../lib/auth-context';
 import { Sidebar } from '../../components/shared/Sidebar';
 import { Topbar } from '../../components/shared/Topbar';
 import { Footer } from '../../components/shared/Footer';
+import { SystemNpsModal } from '../../components/shared/SystemNpsModal';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -34,6 +35,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <main className="flex-1 p-6 overflow-y-auto">{children}</main>
         <Footer />
       </div>
+      <SystemNpsModal />
     </div>
   );
 }
