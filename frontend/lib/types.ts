@@ -235,3 +235,29 @@ export interface SystemNpsSummary {
   npsScore: number;
   comments: { id: string; score: number; comment: string; createdAt: string }[];
 }
+
+export interface SpecialistAssignmentItem {
+  id: string;
+  description: string;
+  active: boolean;
+  createdAt: string;
+  user: {
+    id: string;
+    fullName: string;
+    area: { name: string } | null;
+    position: { name: string } | null;
+  };
+}
+
+export interface EligibleSpecialistUser {
+  id: string;
+  fullName: string;
+}
+
+export interface AnnouncementItem {
+  id: string;
+  text: string;
+  active: boolean;
+  createdAt: string;
+  createdBy?: { fullName: string };
+}

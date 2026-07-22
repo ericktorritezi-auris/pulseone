@@ -9,6 +9,7 @@ import { CollaboratorDashboard, AdminDashboardData, ManagerDashboardData } from 
 import { ScoreRing } from '../../../components/shared/ScoreRing';
 import { FeedbackList } from '../../../components/shared/FeedbackList';
 import { AvatarInitials } from '../../../components/shared/AvatarInitials';
+import { AnnouncementBanner } from '../../../components/shared/AnnouncementBanner';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -38,6 +39,8 @@ export default function DashboardPage() {
 
   return (
     <div>
+      <AnnouncementBanner />
+
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-xl font-semibold text-p-primary-dark">Olá, {user.fullName.split(' ')[0]}! 👋</h1>
         {!isAdmin && (

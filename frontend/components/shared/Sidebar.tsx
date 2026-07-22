@@ -20,6 +20,8 @@ import {
   ScrollText,
   X,
   Smile,
+  Contact,
+  Megaphone,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
 
@@ -35,6 +37,7 @@ const COLABORADOR_MENU: MenuItem[] = [
   { href: '/feedbacks/enviados', label: 'Feedbacks Enviados', icon: Send },
   { href: '/pulse', label: 'Feedback Pulse', icon: Activity },
   { href: '/historico', label: 'Histórico', icon: History },
+  { href: '/atribuicoes-especialistas', label: 'Atribuições Especialistas', icon: Contact },
   { href: '/perfil', label: 'Meu Perfil', icon: User },
 ];
 
@@ -54,6 +57,8 @@ const ADMIN_MENU: MenuItem[] = [
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/auditoria', label: 'Auditoria', icon: ScrollText },
   { href: '/nps', label: 'NPS', icon: Smile },
+  { href: '/atribuicoes-especialistas', label: 'Atribuições Especialistas', icon: Contact },
+  { href: '/comunicados', label: 'Comunicados', icon: Megaphone },
   { href: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
 
@@ -67,6 +72,8 @@ const GESTOR_MENU_COM_CADASTRO: MenuItem[] = [
   { href: '/pulse/time', label: 'Avaliação do Time', icon: Users },
   { href: '/relatorios', label: 'Relatórios', icon: FileText },
   { href: '/historico', label: 'Histórico', icon: History },
+  { href: '/atribuicoes-especialistas', label: 'Atribuições Especialistas', icon: Contact },
+  { href: '/comunicados', label: 'Comunicados', icon: Megaphone },
   { href: '/perfil', label: 'Meu Perfil', icon: User },
 ];
 
