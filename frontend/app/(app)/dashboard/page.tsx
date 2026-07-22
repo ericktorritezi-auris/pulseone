@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<CollaboratorDashboard | null>(null);
   const [adminData, setAdminData] = useState<AdminDashboardData | null>(null);
   const [managerData, setManagerData] = useState<ManagerDashboardData | null>(null);
+  const [activeSpecialists, setActiveSpecialists] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,6 +29,13 @@ export default function DashboardPage() {
     }
     if (user.role === 'GESTOR') {
       requests.push(api.get<ManagerDashboardData>('/dashboard/manager').then(setManagerData));
+      // Reaproveita a mesma lista que a tela de Atribuições Especialistas
+      // já usa — só conta os ativos, pro card do dashboard.
+      requests.push(
+        api
+          .get<{ active: boolean }[]>('/specialist-assignments')
+          .then((items) => setActiveSpecialists(items.filter((i) => i.active).length)),
+      );
     }
 
     Promise.all(requests).finally(() => setLoading(false));
@@ -128,12 +136,23 @@ export default function DashboardPage() {
       {/* ============ DASHBOARD DO GESTOR (executivo da própria equipe) ============ */}
       {isGestor && (
         <>
-          <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
-            <p className="text-xs text-p-neutral mb-1">Total de colaboradores (todas as áreas)</p>
-            <p className="text-2xl font-semibold text-p-primary-dark">{managerData?.teamSize ?? 0}</p>
-            {managerData?.cycleLabel && (
-              <p className="text-xs text-p-neutral mt-1">Último ciclo: {managerData.cycleLabel}</p>
-            )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <p className="text-xs text-p-neutral mb-1">Total de colaboradores (todas as áreas)</p>
+              <p className="text-2xl font-semibold text-p-primary-dark">{managerData?.teamSize ?? 0}</p>
+              {managerData?.cycleLabel && (
+                <p className="text-xs text-p-neutral mt-1">Último ciclo: {managerData.cycleLabel}</p>
+              )}
+            </div>
+
+            <Link
+              href="/atribuicoes-especialistas"
+              className="bg-white rounded-xl border border-slate-200 p-5 hover:border-p-primary transition-colors"
+            >
+              <p className="text-xs text-p-neutral mb-1">Especialistas com Atribuições</p>
+              <p className="text-2xl font-semibold text-p-primary-dark">{activeSpecialists ?? '—'}</p>
+              <p className="text-xs text-p-primary mt-1">Ver atribuições →</p>
+            </Link>
           </div>
 
           <p className="text-xs font-semibold text-p-neutral uppercase mb-3">Minhas áreas</p>

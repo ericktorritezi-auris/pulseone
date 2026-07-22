@@ -124,10 +124,10 @@ export default function AtribuicoesEspecialistasPage() {
         {items.map((item) => (
           <div
             key={item.id}
-            className={`flex items-center justify-between gap-4 px-5 py-4 border-b border-slate-100 last:border-b-0 ${
+            className={`flex items-center justify-between gap-4 px-5 py-4 border-b border-slate-100 last:border-b-0 cursor-pointer hover:bg-slate-50 ${
               !item.active ? 'opacity-50' : ''
-            } ${!canManage ? 'cursor-pointer hover:bg-slate-50' : ''}`}
-            onClick={() => !canManage && setViewing(item)}
+            }`}
+            onClick={() => setViewing(item)}
           >
             <div className="flex items-center gap-3 min-w-0">
               <AvatarInitials name={item.user.fullName} size="sm" />
@@ -145,7 +145,7 @@ export default function AtribuicoesEspecialistasPage() {
             </div>
 
             {canManage ? (
-              <div className="flex gap-2 shrink-0">
+              <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => openEdit(item)} className="text-p-neutral hover:text-p-primary">
                   <Pencil size={16} />
                 </button>
