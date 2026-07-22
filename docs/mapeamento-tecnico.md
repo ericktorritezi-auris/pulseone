@@ -847,6 +847,14 @@ O gestor cadastra atribuições, mas só tinha acesso à visão de **gerenciamen
 
 Sem mudança nenhuma no dashboard do admin, nem em nenhuma regra de permissão (quem edita/exclui continua exatamente igual).
 
+### 5.44 Melhoria de UX — modal de consulta das Atribuições Especialistas
+
+Reportado pelo Erick: o modal ficava estreito demais pra atribuições longas (com várias linhas/tópicos), sem rolagem interna — o texto ficava cortado. Melhorado:
+- Largura bem maior (`max-w-2xl`, era `max-w-sm`).
+- Corpo com rolagem própria (`overflow-y-auto`, altura máxima de 85% da viewport) — cabeçalho e rodapé ficam fixos, só o texto da atribuição rola.
+- Tipografia com mais respiro (linha mais espaçada) e um rótulo "Atribuições" acima do texto.
+- Botão de fechar (X) no canto, além do botão "Fechar" embaixo; clicar fora do modal (na camada escura) também fecha.
+
 ### 5.31 Correção — botão "Sair" inacessível no mobile
 
 Depois de testar o menu deslizante mobile (seção 5.28) na prática, o Erick reportou que o botão "Sair" ficava fora da área visível da tela. Causa: `h-screen` (`100vh`) não bate com a altura real da viewport em navegadores mobile (a barra de endereço/rodapé "come" parte desse espaço) — e o `Sidebar` já usava `fixed inset-y-0`, que sozinho já estica corretamente do topo ao fim da tela real, tornando o `h-screen` redundante e problemático. Corrigido: removida a classe `h-screen`; adicionado `min-h-0` no menu de navegação (evita que ele "empurre" o rodapé mesmo com `flex-1`) e `shrink-0` no botão Sair (nunca é comprimido pelo flexbox). Nenhuma mudança no desktop.
