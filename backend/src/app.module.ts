@@ -17,6 +17,8 @@ import { AdminToolsModule } from './admin-tools/admin-tools.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { SystemNpsModule } from './system-nps/system-nps.module';
+import { SpecialistAssignmentsModule } from './specialist-assignments/specialist-assignments.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
 
 @Module({
   imports: [
@@ -36,6 +38,8 @@ import { SystemNpsModule } from './system-nps/system-nps.module';
     AdminToolsModule,
     AuditLogsModule,
     SystemNpsModule,
+    SpecialistAssignmentsModule,
+    AnnouncementsModule,
   ],
   providers: [
     {

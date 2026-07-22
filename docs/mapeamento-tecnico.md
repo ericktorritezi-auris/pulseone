@@ -819,6 +819,25 @@ O backend tinha o endpoint (`POST /auth/verify-email/:token`) desde a Sprint 0, 
 
 Conferidos também os outros 3 links usados em e-mails (reset de senha, abertura de ciclo, feedback recebido) — todos já tinham página correspondente; esse era o único gap.
 
+### 5.41 NPS do Sistema (pedido do Erick, medindo a satisfação com o PulseOne em si)
+
+Diferente do NPS de pessoas (que já existe dentro do Pulse), esse mede o quanto os usuários recomendam o **próprio sistema**. Admin nunca participa (nem responde, nem entra na contagem de elegíveis).
+
+- **Disparo por campanha, não por contagem de login**: admin clica em "Disparar pesquisa NPS" (`SystemNpsCampaign`, uma linha nova = uma campanha nova). No login de qualquer não-admin, o sistema checa se essa pessoa já **enviou** resposta pra campanha mais recente — se não, mostra o modal. "Agora não" nunca grava nada (sem rastro), então a pesquisa volta a aparecer em todo login seguinte até a pessoa responder de verdade.
+- **Anonimato de duas camadas, em tabelas separadas**: `SystemNpsParticipation` (quem já respondeu qual campanha — sem nota, sem comentário, só pra decidir se mostra o modal de novo) e `SystemNpsResponse` (nota + comentário, **sem nenhum campo de usuário** — nem admin com acesso direto ao banco consegue ligar uma resposta a uma pessoa).
+- **Painel do admin** (`/nps`): o NPS calculado (promotores/neutros/detratores) é sempre **acumulado de todas as campanhas já disparadas, pra sempre** — mede a satisfação geral ao longo do tempo. Já a contagem de participação ("X de Y responderam") é sempre só da **campanha mais recente** — reinicia sozinha a cada disparo novo, sem precisar apagar nada (a consulta já filtra pela campanha mais recente).
+- Sessões já logadas nunca são interrompidas — a checagem só acontece no momento do login, nunca durante uma sessão em andamento.
+
+### 5.42 v1.1.0 — Atribuições Especialistas + Comunicados
+
+Duas telas novas, totalmente isoladas do restante do sistema (nenhuma tabela existente referencia as novas, e vice-versa) — puramente informativas.
+
+**Atribuições Especialistas** (`SpecialistAssignment`): cadastro de "quem é responsável por qual assunto", pra saber pra quem escalar. Consulta é livre pra **todo mundo** (colaborador, gestor, admin); cadastrar/editar/ativar-desativar/excluir é só **ADMIN e GESTOR**. Admin nunca pode ser cadastrado como especialista (validado no backend). A pessoa vinculada pode ser qualquer cadastro ativo de qualquer área — não é restrito à área de quem cadastra. Colaborador vê uma lista simples (só os ativos) e, ao clicar, abre um modal com nome + texto livre + botão fechar. Admin/gestor veem tudo (ativo e inativo) com as 3 ações.
+
+**Comunicados** (`Announcement`): o **menu de gerenciar** (`/comunicados`) aparece só pra ADMIN/GESTOR; a **faixa de exibição** no topo do Dashboard aparece pra **todo mundo** — só quem escreve é restrito, quem vê é geral. Um componente novo e isolado (`AnnouncementBanner`) busca os comunicados ativos por conta própria e é inserido no topo do Dashboard sem alterar nada do que já existia lá. "Inativo" não apaga o comunicado — só tira da faixa, fica guardado pra consulta futura na própria tela de gerenciamento; "Excluir" é que remove de vez. E-mail dispara só na **criação** (nunca em edição), só pra **COLABORADOR** — admin e gestor nunca recebem, já que são quem publica.
+
+Rodapé do sistema atualizado pra **Versão 1.1.0**, marcando essa evolução.
+
 ### 5.31 Correção — botão "Sair" inacessível no mobile
 
 Depois de testar o menu deslizante mobile (seção 5.28) na prática, o Erick reportou que o botão "Sair" ficava fora da área visível da tela. Causa: `h-screen` (`100vh`) não bate com a altura real da viewport em navegadores mobile (a barra de endereço/rodapé "come" parte desse espaço) — e o `Sidebar` já usava `fixed inset-y-0`, que sozinho já estica corretamente do topo ao fim da tela real, tornando o `h-screen` redundante e problemático. Corrigido: removida a classe `h-screen`; adicionado `min-h-0` no menu de navegação (evita que ele "empurre" o rodapé mesmo com `flex-1`) e `shrink-0` no botão Sair (nunca é comprimido pelo flexbox). Nenhuma mudança no desktop.

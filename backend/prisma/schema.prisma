@@ -91,6 +91,8 @@ model User {
   // Direto de alguém — nunca afeta avaliação de colegas, que continua
   // restrita à mesma área (seção 5.7 + correção da seção 5.25).
   managedAreas  Area[]     @relation("GestorAreas")
+  specialistAssignments SpecialistAssignment[]
+  announcements         Announcement[]
   active        Boolean    @default(true)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
@@ -352,4 +354,36 @@ model SystemNpsResponse {
   campaignId String?
   campaign   SystemNpsCampaign? @relation(fields: [campaignId], references: [id])
   createdAt  DateTime           @default(now())
+}
+
+// ==========================
+// v1.1.0 — ATRIBUIÇÕES ESPECIALISTAS
+// ==========================
+// Cadastro isolado, sem nenhum vínculo com Pulse/ciclos/hierarquia — só
+// informativo, pra saber pra quem escalar um assunto. Consulta é livre pra
+// todo mundo; cadastrar/editar/excluir é só ADMIN e GESTOR.
+model SpecialistAssignment {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  description String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ==========================
+// v1.1.0 — COMUNICADOS
+// ==========================
+// Aviso geral: só ADMIN/GESTOR cadastra, mas todo mundo vê a faixa no
+// Dashboard enquanto estiver ativo. "Inativo" fica guardado pra consulta
+// futura, não é apagado (só o botão Excluir remove de vez).
+model Announcement {
+  id          String   @id @default(uuid())
+  text        String
+  active      Boolean  @default(true)
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

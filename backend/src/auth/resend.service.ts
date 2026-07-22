@@ -142,4 +142,24 @@ export class ResendService {
              <p><a href="${process.env.APP_URL}/feedbacks/recebidos">Ver meu feedback</a></p>`,
     });
   }
+
+  /**
+   * E-mail de comunicado publicado (v1.1.0, pedido do Erick): dispara só
+   * quando um comunicado NOVO é criado (nunca em edição), só pra
+   * COLABORADOR — admin/gestor nunca recebem, já que são quem publica.
+   */
+  async sendAnnouncementPublished(to: string, fullName: string) {
+    if (!this.resend) {
+      this.logger.warn(`Envio de e-mail de comunicado ignorado (Resend não configurado). Destinatário: ${to}`);
+      return null;
+    }
+    return this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: 'Novo comunicado no PulseOne',
+      html: `<p>Olá, ${fullName.split(' ')[0]}!</p>
+             <p>Um novo comunicado foi publicado no PulseOne.</p>
+             <p><a href="${process.env.APP_URL}/dashboard">Acessar o PulseOne</a></p>`,
+    });
+  }
 }
