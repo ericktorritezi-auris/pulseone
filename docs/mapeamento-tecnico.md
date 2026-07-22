@@ -838,6 +838,15 @@ Duas telas novas, totalmente isoladas do restante do sistema (nenhuma tabela exi
 
 Rodapé do sistema atualizado pra **Versão 1.1.0**, marcando essa evolução.
 
+### 5.43 Ajuste no dashboard do Gestor — card de Especialistas + consulta liberada (pedido do Erick)
+
+O gestor cadastra atribuições, mas só tinha acesso à visão de **gerenciamento** — nunca à experiência simples de consulta (clicar no nome → modal com o texto completo → fechar) que o colaborador já tinha.
+
+- **Dashboard do gestor**: o card "Total de colaboradores" virou uma grade de 2 colunas — ao lado, um card novo "Especialistas com Atribuições" (contagem dos ativos, reaproveitando a mesma lista que a tela de Atribuições já busca) com link direto pra `/atribuicoes-especialistas`.
+- **Tela de Atribuições Especialistas**: clicar no nome agora abre o modal de consulta pra **qualquer perfil** (antes só funcionava pro colaborador) — sem tirar os botões de editar/pausar/excluir do admin/gestor, que ficam com `stopPropagation` pra não abrir o modal sem querer ao clicar neles.
+
+Sem mudança nenhuma no dashboard do admin, nem em nenhuma regra de permissão (quem edita/exclui continua exatamente igual).
+
 ### 5.31 Correção — botão "Sair" inacessível no mobile
 
 Depois de testar o menu deslizante mobile (seção 5.28) na prática, o Erick reportou que o botão "Sair" ficava fora da área visível da tela. Causa: `h-screen` (`100vh`) não bate com a altura real da viewport em navegadores mobile (a barra de endereço/rodapé "come" parte desse espaço) — e o `Sidebar` já usava `fixed inset-y-0`, que sozinho já estica corretamente do topo ao fim da tela real, tornando o `h-screen` redundante e problemático. Corrigido: removida a classe `h-screen`; adicionado `min-h-0` no menu de navegação (evita que ele "empurre" o rodapé mesmo com `flex-1`) e `shrink-0` no botão Sair (nunca é comprimido pelo flexbox). Nenhuma mudança no desktop.
