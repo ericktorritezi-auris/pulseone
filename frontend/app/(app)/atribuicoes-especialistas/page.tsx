@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, FormEvent } from 'react';
-import { Plus, Pencil, Pause, Play, Trash2, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Pause, Play, Trash2, ChevronRight, X } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth-context';
 import { AvatarInitials } from '../../../components/shared/AvatarInitials';
@@ -217,28 +217,52 @@ export default function AtribuicoesEspecialistasPage() {
         </form>
       </Drawer>
 
-      {/* Modal de consulta — colaborador */}
+      {/* Modal de consulta — todos os perfis (seção 5.43) */}
       {viewing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <AvatarInitials name={viewing.user.fullName} size="md" />
-              <div>
-                <p className="text-base font-bold text-p-primary-dark">{viewing.user.fullName}</p>
-                <p className="text-xs text-p-neutral">
-                  {[viewing.user.position?.name, viewing.user.area?.name].filter(Boolean).join(' · ')}
-                </p>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8"
+          onClick={() => setViewing(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 p-6 pb-4 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <AvatarInitials name={viewing.user.fullName} size="md" />
+                <div className="min-w-0">
+                  <p className="text-base font-bold text-p-primary-dark truncate">{viewing.user.fullName}</p>
+                  <p className="text-xs text-p-neutral truncate">
+                    {[viewing.user.position?.name, viewing.user.area?.name].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewing(null)}
+                className="text-p-neutral hover:text-p-primary-dark shrink-0"
+                aria-label="Fechar"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto px-6 py-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-p-neutral mb-2">
+                Atribuições
+              </p>
+              <div className="text-[13.5px] leading-[1.75] text-p-primary-dark whitespace-pre-wrap">
+                {viewing.description}
               </div>
             </div>
-            <div className="bg-slate-50 rounded-lg p-4 text-sm text-p-primary-dark whitespace-pre-wrap mb-5">
-              {viewing.description}
+
+            <div className="p-6 pt-4 border-t border-slate-100 shrink-0">
+              <button
+                onClick={() => setViewing(null)}
+                className="w-full border border-slate-300 text-p-primary-dark py-2.5 rounded-lg text-sm font-medium hover:bg-slate-50"
+              >
+                Fechar
+              </button>
             </div>
-            <button
-              onClick={() => setViewing(null)}
-              className="w-full border border-slate-300 text-p-primary-dark py-2.5 rounded-lg text-sm font-medium"
-            >
-              Fechar
-            </button>
           </div>
         </div>
       )}
