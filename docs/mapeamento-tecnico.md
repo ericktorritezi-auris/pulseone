@@ -847,6 +847,20 @@ O gestor cadastra atribuições, mas só tinha acesso à visão de **gerenciamen
 
 Sem mudança nenhuma no dashboard do admin, nem em nenhuma regra de permissão (quem edita/exclui continua exatamente igual).
 
+### 5.45 Filtros de Área/Cargo em Pessoas + Auditoria com paginação e exportação (pedido do Erick)
+
+**Cuidado explícito pedido pelo Erick**: sistema já em produção com uso real — as duas mudanças foram feitas de forma **estritamente aditiva**, sem alterar nenhum comportamento existente.
+
+**Filtros em Pessoas**: dois selects (Área, Cargo) acima da tabela — 100% client-side, sobre os dados que a tela já carrega hoje (nenhuma chamada nova ao backend). Opções derivadas da própria lista de pessoas já carregada, então automaticamente respeitam o que cada perfil já podia ver antes (admin vê todas; gestor só as suas). Cargo reage à Área escolhida. A tabela em si, a busca de dados, o cadastro/edição — nada disso mudou.
+
+**Auditoria — paginação (20/página) + exportação (CSV/Excel/PDF)**:
+- A rota `GET /audit-logs` (existente) **não foi tocada** — segue byte a byte igual. Uma rota nova (`GET /audit-logs/paginated`) foi criada ao lado, e só ela foi conectada à tela.
+- **Excel**: nova dependência `exceljs` no backend — testada de verdade fora do projeto (instalação real + geração de arquivo + compilação TypeScript com os tipos reais da biblioteca) antes de entrar no código, justamente por ser uma biblioteca nova nunca usada aqui.
+- **PDF**: reaproveita o `PulseReportPdfService.generatePdf(html)` já existente (usado nos relatórios) **sem alterar uma linha dele** — só chama o método passando um HTML novo (uma tabela de auditoria), zero risco pro PDF de relatório que já funciona.
+- **CSV**: gerado no próprio backend (string simples), com BOM UTF-8 pra abrir acentuação certa no Excel.
+- Exportação traz **todos os registros que batem com o filtro de ação selecionado na tela** (não só a página atual), com teto de segurança de **5.000 registros** por exportação (combinado com o Erick) — acima disso, a pessoa precisa restringir mais o filtro.
+- Download real (não só abrir em nova aba) via `api.getBlob()` — helper que **já existia** (usado no PDF de relatório), reaproveitado sem alteração.
+
 ### 5.44 Melhoria de UX — modal de consulta das Atribuições Especialistas
 
 Reportado pelo Erick: o modal ficava estreito demais pra atribuições longas (com várias linhas/tópicos), sem rolagem interna — o texto ficava cortado. Melhorado:
