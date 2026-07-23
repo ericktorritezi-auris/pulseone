@@ -261,6 +261,30 @@ export default function PessoasPage() {
     }
   }
 
+  // Filtros de Área/Cargo (puramente client-side, sobre os dados já
+  // carregados — não muda nada do que já existe, só acrescenta). Opções
+  // derivadas da própria lista de pessoas, já respeitando o que cada
+  // perfil pode ver (admin vê tudo, gestor só as próprias áreas).
+  const [filterAreaId, setFilterAreaId] = useState('');
+  const [filterPositionId, setFilterPositionId] = useState('');
+
+  const filterAreaOptions = Array.from(
+    new Map(people.filter((p) => p.area).map((p) => [p.area!.id, p.area!.name])).entries(),
+  ).sort((a, b) => a[1].localeCompare(b[1]));
+
+  const filterPositionOptions = Array.from(
+    new Map(
+      people
+        .filter((p) => p.position && (!filterAreaId || p.areaId === filterAreaId))
+        .map((p) => [p.position!.id, p.position!.name]),
+    ).entries(),
+  ).sort((a, b) => a[1].localeCompare(b[1]));
+
+  const filteredPeople = people.filter(
+    (p) =>
+      (!filterAreaId || p.areaId === filterAreaId) && (!filterPositionId || p.positionId === filterPositionId),
+  );
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -277,6 +301,36 @@ export default function PessoasPage() {
           <Plus size={16} />
           Cadastrar Pessoa
         </button>
+      </div>
+
+      <div className="flex gap-3 mb-4">
+        <select
+          value={filterAreaId}
+          onChange={(e) => {
+            setFilterAreaId(e.target.value);
+            setFilterPositionId(''); // cargo pertence a uma área — troca de área reseta o filtro de cargo
+          }}
+          className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+        >
+          <option value="">Todas as áreas</option>
+          {filterAreaOptions.map(([id, name]) => (
+            <option key={id} value={id}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filterPositionId}
+          onChange={(e) => setFilterPositionId(e.target.value)}
+          className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+        >
+          <option value="">Todos os cargos</option>
+          {filterPositionOptions.map(([id, name]) => (
+            <option key={id} value={id}>
+              {name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -299,14 +353,14 @@ export default function PessoasPage() {
                 </td>
               </tr>
             )}
-            {!loading && people.length === 0 && (
+            {!loading && filteredPeople.length === 0 && (
               <tr>
                 <td colSpan={6} className="text-center py-8 text-p-neutral">
-                  Nenhuma pessoa cadastrada ainda.
+                  {people.length === 0 ? 'Nenhuma pessoa cadastrada ainda.' : 'Nenhuma pessoa encontrada com esse filtro.'}
                 </td>
               </tr>
             )}
-            {people.map((person) => (
+            {filteredPeople.map((person) => (
               <tr key={person.id} className="border-t border-slate-100">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
