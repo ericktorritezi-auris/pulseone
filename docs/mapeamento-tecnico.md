@@ -861,6 +861,12 @@ Sem mudança nenhuma no dashboard do admin, nem em nenhuma regra de permissão (
 - Exportação traz **todos os registros que batem com o filtro de ação selecionado na tela** (não só a página atual), com teto de segurança de **5.000 registros** por exportação (combinado com o Erick) — acima disso, a pessoa precisa restringir mais o filtro.
 - Download real (não só abrir em nova aba) via `api.getBlob()` — helper que **já existia** (usado no PDF de relatório), reaproveitado sem alteração.
 
+### 5.46 Correção — horários exibidos sem fuso horário explícito
+
+Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.
+
+**Correção:** `{ timeZone: 'America/Sao_Paulo' }` adicionado explicitamente nos 10 pontos (Auditoria, NPS, Ciclos Pulse, Relatórios, Comunicados, Dashboard ×2, Feedbacks, Notificações) — o horário exibido agora é **sempre** o de Brasília, independente de onde a página é processada. Confirmada varredura final: nenhuma chamada de formatação de data/hora ficou sem o fuso explícito.
+
 ### 5.44 Melhoria de UX — modal de consulta das Atribuições Especialistas
 
 Reportado pelo Erick: o modal ficava estreito demais pra atribuições longas (com várias linhas/tópicos), sem rolagem interna — o texto ficava cortado. Melhorado:
