@@ -282,7 +282,7 @@ export default function RelatorioDetalhePage() {
               </p>
               {report.finalizedAt && (
                 <p className="text-xs text-p-neutral mt-3">
-                  Finalizado em {new Date(report.finalizedAt).toLocaleDateString('pt-BR')}
+                  Finalizado em {new Date(report.finalizedAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                 </p>
               )}
             </>

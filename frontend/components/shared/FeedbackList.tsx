@@ -31,7 +31,7 @@ export function FeedbackList({ items, direction, loading }: FeedbackListProps) {
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-p-primary-dark">{person}</p>
                 <span className="text-xs text-p-neutral">
-                  {new Date(item.criadoEm).toLocaleDateString('pt-BR')}
+                  {new Date(item.criadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                 </span>
               </div>
               <p className="text-sm text-p-neutral mt-1">{item.texto}</p>

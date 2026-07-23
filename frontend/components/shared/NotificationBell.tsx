@@ -78,7 +78,7 @@ export function NotificationBell() {
                 <p className="text-sm font-medium text-p-primary-dark">{n.title}</p>
                 <p className="text-xs text-p-neutral mt-0.5">{n.message}</p>
                 <p className="text-[11px] text-p-neutral mt-1">
-                  {new Date(n.createdAt).toLocaleString('pt-BR')}
+                  {new Date(n.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                 </p>
               </button>
             ))

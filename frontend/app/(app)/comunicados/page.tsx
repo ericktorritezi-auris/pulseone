@@ -119,7 +119,7 @@ export default function ComunicadosPage() {
                 <StatusBadge status={item.active ? 'ATIVO' : 'INATIVO'} />
                 <span>
                   criado por {item.createdBy?.fullName ?? '—'} em{' '}
-                  {new Date(item.createdAt).toLocaleDateString('pt-BR')}
+                  {new Date(item.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                 </span>
               </div>
             </div>

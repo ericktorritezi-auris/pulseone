@@ -101,7 +101,7 @@ export default function DashboardPage() {
                   <p className="text-lg font-semibold text-p-primary-dark">{adminData.pulsoVigente.label}</p>
                   {adminData.pulsoVigente.deadline && (
                     <p className="text-xs text-p-neutral mt-1">
-                      Prazo: {new Date(adminData.pulsoVigente.deadline).toLocaleDateString('pt-BR')}
+                      Prazo: {new Date(adminData.pulsoVigente.deadline).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                     </p>
                   )}
                   {adminData.participacaoPercentual !== null && (
@@ -256,7 +256,7 @@ export default function DashboardPage() {
                 <p className="text-xs text-p-neutral mt-1">
                   {data.pulseAtual.total - data.pulseAtual.pendentes} de {data.pulseAtual.total} avaliações concluídas
                   {data.pulseAtual.deadline &&
-                    ` • Prazo: ${new Date(data.pulseAtual.deadline).toLocaleDateString('pt-BR')}`}
+                    ` • Prazo: ${new Date(data.pulseAtual.deadline).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`}
                 </p>
               </>
             ) : (

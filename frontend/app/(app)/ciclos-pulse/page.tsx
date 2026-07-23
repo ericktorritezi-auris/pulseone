@@ -149,7 +149,7 @@ export default function CiclosPulsePage() {
                   <StatusBadge status={cycle.status} />
                 </td>
                 <td className="px-4 py-3 text-p-neutral">
-                  {cycle.deadline ? new Date(cycle.deadline).toLocaleDateString('pt-BR') : '—'}
+                  {cycle.deadline ? new Date(cycle.deadline).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-2">

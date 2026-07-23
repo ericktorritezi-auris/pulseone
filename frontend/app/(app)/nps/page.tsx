@@ -79,7 +79,7 @@ export default function SystemNpsPage() {
               <>
                 <p className="text-sm font-semibold text-p-primary-dark">
                   Campanha disparada em{' '}
-                  {status.createdAt && new Date(status.createdAt).toLocaleDateString('pt-BR')}
+                  {status.createdAt && new Date(status.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                 </p>
                 <p className="text-xs text-p-neutral">
                   {status.totalResponderam} de {status.totalElegiveis} pessoas já responderam
@@ -192,7 +192,7 @@ export default function SystemNpsPage() {
                   </span>
                   <p className="text-sm text-p-primary-dark">{c.comment}</p>
                   <p className="text-xs text-p-neutral mt-0.5">
-                    {new Date(c.createdAt).toLocaleDateString('pt-BR')}
+                    {new Date(c.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                   </p>
                 </div>
               );

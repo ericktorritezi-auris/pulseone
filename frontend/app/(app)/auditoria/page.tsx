@@ -170,7 +170,7 @@ export default function AuditoriaPage() {
             {logs.map((log) => (
               <tr key={log.id} className="border-t border-slate-100">
                 <td className="px-4 py-3 text-p-neutral whitespace-nowrap">
-                  {new Date(log.createdAt).toLocaleString('pt-BR')}
+                  {new Date(log.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
                 </td>
                 <td className="px-4 py-3 text-p-primary-dark">
                   {log.user ? log.user.fullName : <span className="text-p-neutral">—</span>}
