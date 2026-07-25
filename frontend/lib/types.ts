@@ -83,6 +83,8 @@ export interface PulseCycle {
   deadline: string | null;
   closedAt: string | null;
   createdAt: string;
+  areaId?: string | null;
+  area?: { name: string } | null;
 }
 
 export interface PendingPulseFeedback {
@@ -192,9 +194,14 @@ export interface AdminDashboardData {
   totalCargos: number;
   pessoasPorArea: { areaName: string; total: number }[];
   totalPulsos: number;
-  pulsoVigente: { label: string; deadline: string | null } | null;
-  participacaoPercentual: number | null;
-  pendencias: number;
+  ciclosAbertos: {
+    id: string;
+    label: string;
+    areaName: string;
+    deadline: string | null;
+    participacaoPercentual: number;
+    pendencias: number;
+  }[];
 }
 
 export interface ManagerDashboardData {
@@ -260,4 +267,6 @@ export interface AnnouncementItem {
   active: boolean;
   createdAt: string;
   createdBy?: { fullName: string };
+  areaId?: string | null;
+  area?: { name: string } | null;
 }

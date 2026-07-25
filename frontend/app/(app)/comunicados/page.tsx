@@ -8,21 +8,36 @@ import { StatusBadge } from '../../../components/shared/StatusBadge';
 import { Drawer } from '../../../components/shared/Drawer';
 import { AnnouncementItem } from '../../../lib/types';
 
+interface EligibleArea {
+  id: string;
+  name: string;
+}
+
 export default function ComunicadosPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<AnnouncementItem[]>([]);
+  const [eligibleAreas, setEligibleAreas] = useState<EligibleArea[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [text, setText] = useState('');
+  const [scope, setScope] = useState<'geral' | 'area'>('geral');
+  const [areaId, setAreaId] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const canManage = user?.role === 'ADMIN' || user?.role === 'GESTOR';
 
   async function loadData() {
     setLoading(true);
     try {
-      setItems(await api.get<AnnouncementItem[]>('/announcements'));
+      const [itemsRes, areasRes] = await Promise.all([
+        api.get<AnnouncementItem[]>('/announcements'),
+        canManage ? api.get<EligibleArea[]>('/announcements/eligible-areas') : Promise.resolve([]),
+      ]);
+      setItems(itemsRes);
+      setEligibleAreas(areasRes);
     } finally {
       setLoading(false);
     }
@@ -30,6 +45,7 @@ export default function ComunicadosPage() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (user?.role !== 'ADMIN' && user?.role !== 'GESTOR') {
@@ -39,6 +55,8 @@ export default function ComunicadosPage() {
   function openCreate() {
     setEditingId(null);
     setText('');
+    setScope('geral');
+    setAreaId('');
     setError('');
     setDrawerOpen(true);
   }
@@ -56,9 +74,14 @@ export default function ComunicadosPage() {
     setSubmitting(true);
     try {
       if (editingId) {
+        // Edição só troca o texto — a área do comunicado é definida na
+        // criação e não muda depois (mesmo padrão do backend hoje).
         await api.patch(`/announcements/${editingId}`, { text });
       } else {
-        await api.post('/announcements', { text });
+        await api.post('/announcements', {
+          text,
+          ...(scope === 'area' && areaId ? { areaId } : {}),
+        });
       }
       setDrawerOpen(false);
       await loadData();
@@ -88,8 +111,8 @@ export default function ComunicadosPage() {
         <div>
           <h1 className="text-xl font-semibold text-p-primary-dark">Comunicados</h1>
           <p className="text-sm text-p-neutral">
-            Avisos gerais que aparecem no topo do painel de todo mundo. Só os ativos ficam
-            visíveis.
+            Avisos que aparecem no topo do painel — geral (todo mundo) ou só de uma área
+            específica. Só os ativos ficam visíveis.
           </p>
         </div>
         <button
@@ -115,8 +138,11 @@ export default function ComunicadosPage() {
           >
             <div className="min-w-0">
               <p className="text-sm text-p-primary-dark whitespace-pre-wrap mb-2">{item.text}</p>
-              <div className="flex items-center gap-2 text-xs text-p-neutral">
+              <div className="flex items-center gap-2 text-xs text-p-neutral flex-wrap">
                 <StatusBadge status={item.active ? 'ATIVO' : 'INATIVO'} />
+                <span className="text-[10px] font-semibold uppercase tracking-wide bg-blue-50 text-p-primary px-2 py-0.5 rounded-full">
+                  {item.area?.name ?? 'Geral'}
+                </span>
                 <span>
                   criado por {item.createdBy?.fullName ?? '—'} em{' '}
                   {new Date(item.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
@@ -148,14 +174,58 @@ export default function ComunicadosPage() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none"
-              placeholder="Escreva o comunicado que vai aparecer pra todo mundo..."
+              placeholder="Escreva o comunicado..."
             />
             {!editingId && (
               <p className="text-xs text-p-neutral mt-1">
-                Ao salvar, todos os colaboradores recebem um e-mail avisando sobre este comunicado.
+                Ao salvar, os colaboradores alcançados recebem um e-mail avisando sobre este
+                comunicado.
               </p>
             )}
           </div>
+
+          {!editingId && (
+            <div>
+              <label className="block text-sm font-medium text-p-primary-dark mb-2">Alcance</label>
+              <div className="flex gap-4 mb-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    checked={scope === 'geral'}
+                    onChange={() => {
+                      setScope('geral');
+                      setAreaId('');
+                    }}
+                  />
+                  Geral (todo mundo)
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="radio" checked={scope === 'area'} onChange={() => setScope('area')} />
+                  Só uma área
+                </label>
+              </div>
+              {scope === 'area' && (
+                <select
+                  required
+                  value={areaId}
+                  onChange={(e) => setAreaId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                >
+                  <option value="">Selecione a área...</option>
+                  {eligibleAreas.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {user?.role === 'GESTOR' && (
+                <p className="text-xs text-p-neutral mt-1">
+                  Você só pode escolher entre as áreas que gerencia.
+                </p>
+              )}
+            </div>
+          )}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 

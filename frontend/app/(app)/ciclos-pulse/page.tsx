@@ -3,7 +3,7 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { Plus, BarChart3, ClipboardCheck } from 'lucide-react';
 import { api } from '../../../lib/api';
-import { PulseCycle, CycleProgress } from '../../../lib/types';
+import { PulseCycle, CycleProgress, Area } from '../../../lib/types';
 import { Drawer } from '../../../components/shared/Drawer';
 import { StatusBadge } from '../../../components/shared/StatusBadge';
 import { ProgressBar } from '../../../components/shared/ProgressBar';
@@ -26,10 +26,13 @@ const SHOWS_CONSOLIDATION_PROGRESS = new Set(['EM_CONSOLIDACAO', 'FINALIZADO', '
 
 export default function CiclosPulsePage() {
   const [cycles, setCycles] = useState<PulseCycle[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [label, setLabel] = useState('');
   const [deadline, setDeadline] = useState('');
+  const [scope, setScope] = useState<'geral' | 'area'>('geral');
+  const [areaId, setAreaId] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
@@ -43,7 +46,12 @@ export default function CiclosPulsePage() {
   async function loadData() {
     setLoading(true);
     try {
-      setCycles(await api.get<PulseCycle[]>('/pulse-cycles'));
+      const [cyclesRes, areasRes] = await Promise.all([
+        api.get<PulseCycle[]>('/pulse-cycles'),
+        api.get<Area[]>('/areas'),
+      ]);
+      setCycles(cyclesRes);
+      setAreas(areasRes);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar ciclos.');
     } finally {
@@ -60,9 +68,14 @@ export default function CiclosPulsePage() {
     setError('');
     setSubmitting(true);
     try {
-      await api.post('/pulse-cycles', { label });
+      await api.post('/pulse-cycles', {
+        label,
+        ...(scope === 'area' && areaId ? { areaId } : {}),
+      });
       setDrawerOpen(false);
       setLabel('');
+      setScope('geral');
+      setAreaId('');
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar ciclo.');
@@ -126,6 +139,7 @@ export default function CiclosPulsePage() {
           <thead className="bg-slate-50 text-p-neutral text-xs uppercase">
             <tr>
               <th className="text-left px-4 py-3">Ciclo</th>
+              <th className="text-left px-4 py-3">Área</th>
               <th className="text-left px-4 py-3">Status</th>
               <th className="text-left px-4 py-3">Prazo</th>
               <th className="text-right px-4 py-3">Ações</th>
@@ -134,17 +148,22 @@ export default function CiclosPulsePage() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={4} className="text-center py-8 text-p-neutral">Carregando...</td>
+                <td colSpan={5} className="text-center py-8 text-p-neutral">Carregando...</td>
               </tr>
             )}
             {!loading && cycles.length === 0 && (
               <tr>
-                <td colSpan={4} className="text-center py-8 text-p-neutral">Nenhum ciclo criado ainda.</td>
+                <td colSpan={5} className="text-center py-8 text-p-neutral">Nenhum ciclo criado ainda.</td>
               </tr>
             )}
             {cycles.map((cycle) => (
               <tr key={cycle.id} className="border-t border-slate-100">
                 <td className="px-4 py-3 font-medium text-p-primary-dark">{cycle.label}</td>
+                <td className="px-4 py-3">
+                  <span className="text-xs font-semibold uppercase tracking-wide bg-blue-50 text-p-primary px-2 py-0.5 rounded-full">
+                    {cycle.area?.name ?? 'Geral'}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   <StatusBadge status={cycle.status} />
                 </td>
@@ -201,6 +220,45 @@ export default function CiclosPulsePage() {
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
               placeholder="Ex: Pulse Julho/2026"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-p-primary-dark mb-2">Alcance do ciclo</label>
+            <div className="flex gap-4 mb-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  checked={scope === 'geral'}
+                  onChange={() => {
+                    setScope('geral');
+                    setAreaId('');
+                  }}
+                />
+                Geral (todas as áreas)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="radio" checked={scope === 'area'} onChange={() => setScope('area')} />
+                Só uma área
+              </label>
+            </div>
+            {scope === 'area' && (
+              <select
+                required
+                value={areaId}
+                onChange={(e) => setAreaId(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              >
+                <option value="">Selecione a área...</option>
+                {areas.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <p className="text-xs text-p-neutral mt-1">
+              Dá pra ter ciclos de áreas diferentes abertos ao mesmo tempo, em momentos diferentes.
+            </p>
           </div>
 
           <div>

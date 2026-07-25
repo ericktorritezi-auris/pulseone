@@ -88,30 +88,42 @@ export default function DashboardPage() {
             </div>
             <div className="bg-white rounded-xl border border-slate-200 p-5">
               <AlertCircle size={18} className="text-p-warning mb-2" />
-              <p className="text-2xl font-semibold text-p-primary-dark">{adminData?.pendencias ?? 0}</p>
-              <p className="text-xs text-p-neutral">Pendências no pulso vigente</p>
+              <p className="text-2xl font-semibold text-p-primary-dark">
+                {adminData?.ciclosAbertos.reduce((sum, c) => sum + c.pendencias, 0) ?? 0}
+              </p>
+              <p className="text-xs text-p-neutral">Pendências nos ciclos abertos</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white rounded-xl border border-slate-200 p-5">
-              <p className="text-xs text-p-neutral mb-1">Pulso Vigente</p>
-              {adminData?.pulsoVigente ? (
-                <>
-                  <p className="text-lg font-semibold text-p-primary-dark">{adminData.pulsoVigente.label}</p>
-                  {adminData.pulsoVigente.deadline && (
-                    <p className="text-xs text-p-neutral mt-1">
-                      Prazo: {new Date(adminData.pulsoVigente.deadline).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
-                    </p>
-                  )}
-                  {adminData.participacaoPercentual !== null && (
-                    <p className="text-xs text-p-neutral mt-1">
-                      Participação: <b className="text-p-primary-dark">{adminData.participacaoPercentual}%</b>
-                    </p>
-                  )}
-                </>
+              <p className="text-xs text-p-neutral uppercase font-semibold mb-3">
+                Ciclos Abertos {adminData?.ciclosAbertos && adminData.ciclosAbertos.length > 0 && `(${adminData.ciclosAbertos.length})`}
+              </p>
+              {!adminData?.ciclosAbertos || adminData.ciclosAbertos.length === 0 ? (
+                <p className="text-sm text-p-neutral">Nenhum ciclo aberto no momento.</p>
               ) : (
-                <p className="text-lg font-semibold text-p-primary-dark">Nenhum ciclo aberto</p>
+                <div className="space-y-3">
+                  {adminData.ciclosAbertos.map((c) => (
+                    <div key={c.id} className="border border-slate-100 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-semibold text-p-primary-dark">{c.label}</p>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide bg-blue-50 text-p-primary px-2 py-0.5 rounded-full">
+                          {c.areaName}
+                        </span>
+                      </div>
+                      {c.deadline && (
+                        <p className="text-xs text-p-neutral">
+                          Prazo: {new Date(c.deadline).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+                        </p>
+                      )}
+                      <p className="text-xs text-p-neutral">
+                        Participação: <b className="text-p-primary-dark">{c.participacaoPercentual}%</b>
+                        {c.pendencias > 0 && ` · ${c.pendencias} pendência(s)`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
