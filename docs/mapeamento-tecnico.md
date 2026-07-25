@@ -861,6 +861,25 @@ Sem mudança nenhuma no dashboard do admin, nem em nenhuma regra de permissão (
 - Exportação traz **todos os registros que batem com o filtro de ação selecionado na tela** (não só a página atual), com teto de segurança de **5.000 registros** por exportação (combinado com o Erick) — acima disso, a pessoa precisa restringir mais o filtro.
 - Download real (não só abrir em nova aba) via `api.getBlob()` — helper que **já existia** (usado no PDF de relatório), reaproveitado sem alteração.
 
+### 5.47 Ciclos Pulse por área + Comunicados por área (pedido do Erick)
+
+**Contexto de segurança**: sistema já em produção, mais de 18 pessoas com uso real. Antes de mexer em qualquer coisa, revisei toda a lógica de ciclo (encerrar/consolidar/finalizar/arquivar/progresso) e confirmei que ela já trabalha só por `cycleId` — nenhuma suposição de "todas as áreas" embutida. Isso permitiu uma mudança bem mais cirúrgica do que pareceria à primeira vista.
+
+**Schema**: `PulseCycle.areaId` e `Announcement.areaId`, os dois **opcionais** — `null` = comportamento de sempre (geral), preservando 100% dos dados/ciclos/comunicados já existentes sem nenhuma migração.
+
+**Ciclos Pulse**:
+- `PulseAssignmentService.generateForCycle()`: se o ciclo tem área, gera avaliação só pra ela; sem área, continua processando todas (como sempre). A busca GLOBAL de usuários (pra resolver gestor multi-área) continua intacta — só a lista de "quem está no ciclo" passou a ser filtrável.
+- **Correção crítica** (só aqui exigia cuidado de verdade): o "Pulso Atual" do dashboard do colaborador/gestor buscava "o ciclo aberto mais recente do sistema todo" — com ciclos simultâneos por área diferente, isso podia mostrar o ciclo errado pra alguém. Corrigido pra considerar **Geral OU a própria área da pessoa**. ⚠️ Cuidado técnico: a query usa `OR: areaId ? [...] : [{areaId: null}]` construído explicitamente — usar `?? undefined` dentro de um filtro Prisma faz ele tratar como "sem filtro nesse campo", o que bateria com qualquer área (armadilha percebida e corrigida antes de entregar).
+- **Dashboard do admin**: trocado o card único "Pulso Vigente" por uma lista `ciclosAbertos` (pedido do Erick) — cada ciclo aberto aparece com sua própria área (ou "Geral") e progresso de participação individual.
+- Formulário de criação (Ciclos Pulse) ganhou o seletor "Geral / Só uma área"; listagem ganha coluna de área.
+
+**Comunicados**:
+- `findActive()` agora filtra por Geral + área de quem está vendo (antes mostrava tudo pra todo mundo).
+- Nova rota `GET /announcements/eligible-areas`: admin vê todas as áreas; gestor só as que gerencia (mesmo padrão de Atribuições Especialistas) — validado também no `create()`, não só escondido no frontend.
+- E-mail de comunicado novo: se for por área, só os colaboradores DAQUELA área recebem (antes ia pra todos).
+- **Decisão deliberada**: não usei o endpoint `/areas` (que já existe) pra listar as áreas elegíveis — ele já é consumido por outras telas (Pessoas, Cargos) de um jeito que uma mudança de escopo quebraria. Criei uma rota nova e dedicada só pra isso, zero risco pro que já funciona.
+- Formulário de criação ganhou o mesmo seletor "Geral / Só uma área"; edição continua só alterando o texto (a área é definida na criação, sem caminho de mudança depois — mesmo limite já existente no backend).
+
 ### 5.46 Correção — horários exibidos sem fuso horário explícito
 
 Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.

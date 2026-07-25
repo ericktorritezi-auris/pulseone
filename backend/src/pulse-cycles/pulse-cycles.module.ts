@@ -35,6 +35,11 @@ class CreateCycleDto {
   @IsString()
   @MinLength(3)
   label: string; // ex: "Pulse Junho/2025"
+
+  // Ciclo por área (pedido do Erick) — ausente/null = GERAL (todo mundo).
+  @IsOptional()
+  @IsString()
+  areaId?: string;
 }
 
 class OpenCycleDto {
@@ -67,7 +72,13 @@ class PulseAssignmentService {
   ) {}
 
   async generateForCycle(cycleId: string) {
+    // Ciclo por área (pedido do Erick): se o ciclo tem uma área marcada,
+    // gera avaliação SÓ pra ela. Se não tem (GERAL), continua processando
+    // todas as áreas — exatamente o comportamento de sempre.
+    const cycle = await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id: cycleId } });
+
     const areas = await this.prisma.area.findMany({
+      where: cycle.areaId ? { id: cycle.areaId } : undefined,
       include: { users: { where: { active: true, role: { not: UserRole.ADMIN } } } },
     });
 
@@ -76,7 +87,8 @@ class PulseAssignmentService {
     // do Erick: gestor pode gerenciar mais de uma área). Sem isso, a busca
     // ficava presa à lista de membros da MESMA área da pessoa, e o gestor
     // "de fora" nunca era encontrado — a avaliação hierárquica simplesmente
-    // não era gerada, silenciosamente.
+    // não era gerada, silenciosamente. Isso continua GLOBAL mesmo num
+    // ciclo por área — o gestor pode morar em outra área principal.
     const allActiveUsers = await this.prisma.user.findMany({
       where: { active: true, role: { not: UserRole.ADMIN } },
     });
@@ -174,7 +186,8 @@ class PulseAssignmentService {
       pendingByUser.set(f.evaluatorId, (pendingByUser.get(f.evaluatorId) ?? 0) + 1);
     }
 
-    const cycle = await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id: cycleId } });
+    // "cycle" já foi buscado no início desta função (pra saber a área) —
+    // reaproveitado aqui, sem buscar de novo.
     const deadlineStr = cycle.deadline
       ? new Date(cycle.deadline).toLocaleDateString('pt-BR')
       : 'a definir';
@@ -376,11 +389,14 @@ class PulseCyclesService {
   ) {}
 
   findAll() {
-    return this.prisma.pulseCycle.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.prisma.pulseCycle.findMany({
+      include: { area: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   create(dto: CreateCycleDto) {
-    return this.prisma.pulseCycle.create({ data: { label: dto.label } });
+    return this.prisma.pulseCycle.create({ data: { label: dto.label, areaId: dto.areaId ?? null } });
   }
 
   async open(id: string, dto: OpenCycleDto) {

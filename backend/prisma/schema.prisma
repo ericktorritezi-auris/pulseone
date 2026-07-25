@@ -121,6 +121,8 @@ model Area {
   users     User[]
   positions Position[]
   gestoresAtuantes User[] @relation("GestorAreas")
+  pulseCycles   PulseCycle[]
+  announcements Announcement[]
   createdAt DateTime @default(now())
 }
 
@@ -191,6 +193,13 @@ model PulseCycle {
   closedAt   DateTime?
   archivedAt DateTime?
   createdAt  DateTime         @default(now())
+
+  // Ciclo por área (pedido do Erick) — null = GERAL (todo mundo, o
+  // comportamento de sempre); preenchido = só aquela área específica.
+  // Opcional de propósito: todo ciclo já existente continua "geral" sem
+  // precisar de nenhuma migração de dado.
+  areaId String?
+  area   Area?   @relation(fields: [areaId], references: [id])
 
   pulseFeedbacks PulseFeedback[]
   pulseScores    PulseScore[]
@@ -386,4 +395,11 @@ model Announcement {
   createdBy   User     @relation(fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // Comunicado por área (pedido do Erick) — null = GERAL (todo mundo vê,
+  // comportamento de sempre); preenchido = só quem está naquela área vê
+  // a faixa no Dashboard. Opcional de propósito, mesmo princípio do
+  // PulseCycle.areaId: nenhum comunicado já publicado muda de comportamento.
+  areaId String?
+  area   Area?   @relation(fields: [areaId], references: [id])
 }

@@ -42,7 +42,19 @@ class DashboardService {
       // ciclo ativo pra ele, o card de Pulse Atual não se aplica.
       role === UserRole.ADMIN
         ? null
-        : this.prisma.pulseCycle.findFirst({ where: { status: 'ABERTO' }, orderBy: { openedAt: 'desc' } }),
+        : this.prisma.pulseCycle.findFirst({
+            // Ciclo por área (pedido do Erick): considera ciclos GERAIS
+            // (areaId nulo) e ciclos da PRÓPRIA área da pessoa — nunca o
+            // ciclo de uma área diferente, mesmo que esteja aberto ao
+            // mesmo tempo. Construído explicitamente (não usar `?? undefined`
+            // aqui dentro do OR — o Prisma trata `undefined` como "sem
+            // filtro nesse campo", o que bateria com QUALQUER área).
+            where: {
+              status: 'ABERTO',
+              OR: areaId ? [{ areaId: null }, { areaId }] : [{ areaId: null }],
+            },
+            orderBy: { openedAt: 'desc' },
+          }),
     ]);
 
     let pulseAtual: { label: string; deadline: Date | null; pendentes: number; total: number } | null = null;
@@ -240,41 +252,48 @@ class DashboardService {
   // Dashboard do ADMIN (escopo fechado com o Erick): só administração do
   // sistema — nunca NPS/score (isso é papel do gestor).
   async getAdminDashboard() {
-    const [totalAreas, totalCargos, areas, totalPulsos, pulsoVigente] = await Promise.all([
+    const [totalAreas, totalCargos, areas, totalPulsos, ciclosAbertosRaw] = await Promise.all([
       this.prisma.area.count(),
       this.prisma.position.count(),
       this.prisma.area.findMany({
         select: { name: true, _count: { select: { users: { where: { active: true, role: { not: UserRole.ADMIN } } } } } },
       }),
       this.prisma.pulseCycle.count(),
-      this.prisma.pulseCycle.findFirst({ where: { status: 'ABERTO' }, orderBy: { openedAt: 'desc' } }),
+      // Ciclo por área (pedido do Erick): pode ter mais de um ciclo aberto
+      // simultaneamente (um por área) — vira uma LISTA, não mais um único
+      // "pulso vigente".
+      this.prisma.pulseCycle.findMany({
+        where: { status: 'ABERTO' },
+        include: { area: { select: { name: true } } },
+        orderBy: { openedAt: 'desc' },
+      }),
     ]);
 
-    let participacaoPercentual: number | null = null;
-    let pendencias = 0;
-
-    if (pulsoVigente) {
-      const [total, finalizadas, pendentes] = await Promise.all([
-        this.prisma.pulseFeedback.count({ where: { cycleId: pulsoVigente.id } }),
-        this.prisma.pulseFeedback.count({
-          where: { cycleId: pulsoVigente.id, status: PulseEvaluationStatus.FINALIZADO },
-        }),
-        this.prisma.pulseFeedback.count({
-          where: { cycleId: pulsoVigente.id, status: PulseEvaluationStatus.PENDENTE },
-        }),
-      ]);
-      participacaoPercentual = total > 0 ? Math.round((finalizadas / total) * 100) : 0;
-      pendencias = pendentes;
-    }
+    const ciclosAbertos = await Promise.all(
+      ciclosAbertosRaw.map(async (cycle) => {
+        const [total, finalizadas] = await Promise.all([
+          this.prisma.pulseFeedback.count({ where: { cycleId: cycle.id } }),
+          this.prisma.pulseFeedback.count({
+            where: { cycleId: cycle.id, status: PulseEvaluationStatus.FINALIZADO },
+          }),
+        ]);
+        return {
+          id: cycle.id,
+          label: cycle.label,
+          areaName: cycle.area?.name ?? 'Geral',
+          deadline: cycle.deadline,
+          participacaoPercentual: total > 0 ? Math.round((finalizadas / total) * 100) : 0,
+          pendencias: total - finalizadas,
+        };
+      }),
+    );
 
     return {
       totalAreas,
       totalCargos,
       pessoasPorArea: areas.map((a) => ({ areaName: a.name, total: a._count.users })),
       totalPulsos,
-      pulsoVigente: pulsoVigente ? { label: pulsoVigente.label, deadline: pulsoVigente.deadline } : null,
-      participacaoPercentual,
-      pendencias,
+      ciclosAbertos,
     };
   }
 }
