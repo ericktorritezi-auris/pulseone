@@ -23,7 +23,14 @@ function fmtDate(v: string | null) {
   return v ? new Date(v).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
 }
 
-export function DossieModal({ personId, onClose }: { personId: string; onClose: () => void }) {
+export function DossieModal({ personId, onClose }: { personId: string | null; onClose: () => void }) {
+  // personId null = "Meu Dossiê" (visão de si mesmo, v1.5.0) — rota
+  // separada, nunca aceita id de outra pessoa. Confidenciais ficam
+  // sempre travadas pra leitura nesse modo, e não existe botão de PDF.
+  const isSelfMode = personId === null;
+  const basePath = personId ? `/dossie/${personId}` : '/meu-dossie';
+  const dossieRoot = personId ? '/dossie' : '/meu-dossie';
+
   const [dossie, setDossie] = useState<DossieData | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -44,10 +51,16 @@ export function DossieModal({ personId, onClose }: { personId: string; onClose: 
   const [novaFeriasInicio, setNovaFeriasInicio] = useState('');
   const [novaFeriasFim, setNovaFeriasFim] = useState('');
 
+  // Formação e Certificações (v1.5.0) — editável nos DOIS modos
+  const [novaFormacaoNome, setNovaFormacaoNome] = useState('');
+  const [novaFormacaoData, setNovaFormacaoData] = useState('');
+  const [novaCertNome, setNovaCertNome] = useState('');
+  const [novaCertData, setNovaCertData] = useState('');
+
   async function load() {
     setLoading(true);
     try {
-      const data = await api.get<DossieData>(`/dossie/${personId}`);
+      const data = await api.get<DossieData>(basePath);
       setDossie(data);
       setSalario(data.confidencial.salario !== null ? String(data.confidencial.salario) : '');
       setRegime(data.confidencial.regimeContratacao ?? '');
@@ -71,7 +84,7 @@ export function DossieModal({ personId, onClose }: { personId: string; onClose: 
     setSavingConfidencial(true);
     setError('');
     try {
-      await api.patch(`/dossie/${personId}/confidencial`, {
+      await api.patch(`${basePath}/confidencial`, {
         ...(salario ? { salario: Number(salario) } : {}),
         ...(regime ? { regimeContratacao: regime } : {}),
         ...(modalidade ? { modalidadeTrabalho: modalidade } : {}),
@@ -90,34 +103,60 @@ export function DossieModal({ personId, onClose }: { personId: string; onClose: 
 
   async function handleAddBeneficio() {
     if (!novoBeneficioNome.trim() || !novoBeneficioValor) return;
-    await api.post(`/dossie/${personId}/beneficios`, { nome: novoBeneficioNome, valor: Number(novoBeneficioValor) });
+    await api.post(`${basePath}/beneficios`, { nome: novoBeneficioNome, valor: Number(novoBeneficioValor) });
     setNovoBeneficioNome('');
     setNovoBeneficioValor('');
     await load();
   }
 
   async function handleRemoveBeneficio(id: string) {
-    await api.delete(`/dossie/beneficios/${id}`);
+    await api.delete(`${dossieRoot}/beneficios/${id}`);
     await load();
   }
 
   async function handleAddFerias() {
     if (!novaFeriasInicio || !novaFeriasFim) return;
-    await api.post(`/dossie/${personId}/ferias`, { startDate: novaFeriasInicio, endDate: novaFeriasFim });
+    await api.post(`${basePath}/ferias`, { startDate: novaFeriasInicio, endDate: novaFeriasFim });
     setNovaFeriasInicio('');
     setNovaFeriasFim('');
     await load();
   }
 
   async function handleRemoveFerias(id: string) {
-    await api.delete(`/dossie/ferias/${id}`);
+    await api.delete(`${dossieRoot}/ferias/${id}`);
+    await load();
+  }
+
+  async function handleAddFormacao() {
+    if (!novaFormacaoNome.trim() || !novaFormacaoData) return;
+    await api.post(`${basePath}/formacao`, { nome: novaFormacaoNome, dataConclusao: novaFormacaoData });
+    setNovaFormacaoNome('');
+    setNovaFormacaoData('');
+    await load();
+  }
+
+  async function handleRemoveFormacao(id: string) {
+    await api.delete(`${dossieRoot}/formacao/${id}`);
+    await load();
+  }
+
+  async function handleAddCertificacao() {
+    if (!novaCertNome.trim() || !novaCertData) return;
+    await api.post(`${basePath}/certificacao`, { nome: novaCertNome, dataConclusao: novaCertData });
+    setNovaCertNome('');
+    setNovaCertData('');
+    await load();
+  }
+
+  async function handleRemoveCertificacao(id: string) {
+    await api.delete(`${dossieRoot}/certificacao/${id}`);
     await load();
   }
 
   async function handleDownloadPdf() {
     setDownloading(true);
     try {
-      const blob = await api.getBlob(`/dossie/${personId}/pdf`);
+      const blob = await api.getBlob(`${basePath}/pdf`);
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
@@ -150,14 +189,21 @@ export function DossieModal({ personId, onClose }: { personId: string; onClose: 
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleDownloadPdf}
-              disabled={downloading || loading}
-              className="flex items-center gap-1.5 border border-slate-300 text-p-primary-dark px-3 py-1.5 rounded-lg text-xs font-medium hover:border-p-primary disabled:opacity-50"
-            >
-              <Download size={13} />
-              {downloading ? 'Gerando...' : 'Baixar PDF'}
-            </button>
+            {isSelfMode && (
+              <span className="text-[10px] font-bold uppercase tracking-wide bg-slate-100 text-p-neutral px-2.5 py-1 rounded-full">
+                Meus dados
+              </span>
+            )}
+            {!isSelfMode && (
+              <button
+                onClick={handleDownloadPdf}
+                disabled={downloading || loading}
+                className="flex items-center gap-1.5 border border-slate-300 text-p-primary-dark px-3 py-1.5 rounded-lg text-xs font-medium hover:border-p-primary disabled:opacity-50"
+              >
+                <Download size={13} />
+                {downloading ? 'Gerando...' : 'Baixar PDF'}
+              </button>
+            )}
             <button onClick={onClose} className="text-p-neutral hover:text-p-primary-dark" aria-label="Fechar">
               <X size={20} />
             </button>
@@ -201,14 +247,18 @@ export function DossieModal({ personId, onClose }: { personId: string; onClose: 
                   <h3 className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
                     Informações Confidenciais — uso interno
                   </h3>
-                  {!editing && (
-                    <button
-                      onClick={() => setEditing(true)}
-                      className="flex items-center gap-1 text-xs font-medium text-p-primary hover:underline"
-                    >
-                      <Pencil size={12} />
-                      Editar
-                    </button>
+                  {isSelfMode ? (
+                    <span className="text-[11px] text-amber-700">🔒 só leitura — edição é do gestor/admin</span>
+                  ) : (
+                    !editing && (
+                      <button
+                        onClick={() => setEditing(true)}
+                        className="flex items-center gap-1 text-xs font-medium text-p-primary hover:underline"
+                      >
+                        <Pencil size={12} />
+                        Editar
+                      </button>
+                    )
                   )}
                 </div>
 
@@ -438,6 +488,83 @@ export function DossieModal({ personId, onClose }: { personId: string; onClose: 
                     </div>
                   </div>
                 )}
+              </section>
+
+              {/* Formação e Certificações — editável nos DOIS modos (v1.5.0) */}
+              <section className="bg-blue-50/50 border border-blue-100 rounded-xl p-4">
+                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-p-primary mb-3">
+                  Formação e Certificações
+                </h3>
+
+                <div className="mb-4">
+                  <p className="text-xs font-medium text-p-primary-dark mb-1.5">Formação</p>
+                  {dossie.formacaoECertificacoes.formacoes.length > 0 && (
+                    <div className="space-y-1 mb-2">
+                      {dossie.formacaoECertificacoes.formacoes.map((f) => (
+                        <div key={f.id} className="flex items-center justify-between text-sm bg-white rounded-lg px-3 py-1.5">
+                          <span>
+                            {f.nome} — concluído em {fmtDate(f.dataConclusao)}
+                          </span>
+                          <button onClick={() => handleRemoveFormacao(f.id)} className="text-p-neutral hover:text-red-600">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      placeholder="Ex: Análise de Sistemas"
+                      value={novaFormacaoNome}
+                      onChange={(e) => setNovaFormacaoNome(e.target.value)}
+                      className="flex-1 px-2 py-1.5 border border-slate-300 rounded-lg text-xs"
+                    />
+                    <input
+                      type="date"
+                      value={novaFormacaoData}
+                      onChange={(e) => setNovaFormacaoData(e.target.value)}
+                      className="w-36 px-2 py-1.5 border border-slate-300 rounded-lg text-xs"
+                    />
+                    <button type="button" onClick={handleAddFormacao} className="text-p-primary hover:bg-blue-100 px-2 rounded-lg">
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-medium text-p-primary-dark mb-1.5">Certificações</p>
+                  {dossie.formacaoECertificacoes.certificacoes.length > 0 && (
+                    <div className="space-y-1 mb-2">
+                      {dossie.formacaoECertificacoes.certificacoes.map((c) => (
+                        <div key={c.id} className="flex items-center justify-between text-sm bg-white rounded-lg px-3 py-1.5">
+                          <span>
+                            {c.nome} — concluído em {fmtDate(c.dataConclusao)}
+                          </span>
+                          <button onClick={() => handleRemoveCertificacao(c.id)} className="text-p-neutral hover:text-red-600">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      placeholder="Ex: Gestão de Projetos"
+                      value={novaCertNome}
+                      onChange={(e) => setNovaCertNome(e.target.value)}
+                      className="flex-1 px-2 py-1.5 border border-slate-300 rounded-lg text-xs"
+                    />
+                    <input
+                      type="date"
+                      value={novaCertData}
+                      onChange={(e) => setNovaCertData(e.target.value)}
+                      className="w-36 px-2 py-1.5 border border-slate-300 rounded-lg text-xs"
+                    />
+                    <button type="button" onClick={handleAddCertificacao} className="text-p-primary hover:bg-blue-100 px-2 rounded-lg">
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
               </section>
 
               {/* Atribuições Especialistas — só aparece se houver alguma ativa */}

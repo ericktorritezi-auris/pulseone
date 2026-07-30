@@ -284,6 +284,18 @@ export interface DossieVacationPeriod {
   endDate: string;
 }
 
+export interface DossieFormacao {
+  id: string;
+  nome: string;
+  dataConclusao: string;
+}
+
+export interface DossieCertificacao {
+  id: string;
+  nome: string;
+  dataConclusao: string;
+}
+
 export interface DossieData {
   pessoa: {
     id: string;
@@ -316,4 +328,8 @@ export interface DossieData {
   };
   atribuicoesEspecialistas: string[];
   feedbacksAvulsos: { autor: string; texto: string; data: string }[];
+  formacaoECertificacoes: {
+    formacoes: DossieFormacao[];
+    certificacoes: DossieCertificacao[];
+  };
 }

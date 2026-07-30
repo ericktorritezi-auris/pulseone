@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
+import { FileText } from 'lucide-react';
 import { useAuth } from '../../../lib/auth-context';
 import { api } from '../../../lib/api';
 import { AvatarInitials } from '../../../components/shared/AvatarInitials';
+import { DossieModal } from '../../../components/shared/DossieModal';
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -13,6 +15,7 @@ export default function ProfilePage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showDossie, setShowDossie] = useState(false);
 
   if (!user) return null;
 
@@ -46,10 +49,17 @@ export default function ProfilePage() {
 
       <div className="bg-white rounded-xl border border-slate-200 p-6 flex items-center gap-4 mb-4">
         <AvatarInitials name={user.fullName} size="lg" />
-        <div>
+        <div className="flex-1">
           <p className="text-lg font-semibold text-p-primary-dark">{user.fullName}</p>
           <p className="text-sm text-p-neutral">{user.email}</p>
         </div>
+        <button
+          onClick={() => setShowDossie(true)}
+          className="flex items-center gap-2 border border-slate-300 text-p-primary-dark px-4 py-2 rounded-lg text-sm font-medium hover:border-p-primary shrink-0"
+        >
+          <FileText size={15} />
+          Dados Completos
+        </button>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-3 mb-4">
@@ -118,6 +128,8 @@ export default function ProfilePage() {
           </button>
         </form>
       </div>
+
+      {showDossie && <DossieModal personId={null} onClose={() => setShowDossie(false)} />}
     </div>
   );
 }
