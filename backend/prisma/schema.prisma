@@ -118,6 +118,8 @@ model User {
   dataInicioEmpresa     DateTime?
   beneficios            Benefit[]
   periodosFerias        VacationPeriod[]
+  formacoes             Formacao[]
+  certificacoes         Certificacao[]
   announcements         Announcement[]
   active        Boolean    @default(true)
   createdAt     DateTime   @default(now())
@@ -467,4 +469,26 @@ model MilestoneNotified {
   notifiedAt    DateTime @default(now())
 
   @@unique([recipientId, subjectUserId, type, referenceDate])
+}
+
+// v1.5.0 — Formação e Certificações (pedido do Erick): só informativo,
+// diferente das Informações Confidenciais — pode ser editado pela própria
+// pessoa (via "Meu Perfil") OU por admin/gestor (via Pessoas), os dois
+// caminhos manipulando exatamente os mesmos registros.
+model Formacao {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  nome          String
+  dataConclusao DateTime
+  createdAt     DateTime @default(now())
+}
+
+model Certificacao {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  nome          String
+  dataConclusao DateTime
+  createdAt     DateTime @default(now())
 }

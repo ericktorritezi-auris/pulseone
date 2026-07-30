@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Injectable,
   Module,
@@ -70,6 +71,26 @@ class VacationPeriodDto {
   endDate: string;
 }
 
+// v1.5.0 — Formação e Certificações: só "o que é" + data de conclusão,
+// sem instituição nem período, exatamente como pedido pelo Erick.
+class FormacaoDto {
+  @IsString()
+  @MinLength(1)
+  nome: string;
+
+  @IsDateString()
+  dataConclusao: string;
+}
+
+class CertificacaoDto {
+  @IsString()
+  @MinLength(1)
+  nome: string;
+
+  @IsDateString()
+  dataConclusao: string;
+}
+
 @Injectable()
 class DossieService {
   constructor(
@@ -131,13 +152,81 @@ class DossieService {
     return this.prisma.vacationPeriod.delete({ where: { id: periodId } });
   }
 
+  // Formação e Certificações (v1.5.0) — diferente das Informações
+  // Confidenciais, essas DUAS categorias podem ser editadas tanto por
+  // admin/gestor (via Pessoas, checando acesso normalmente) quanto pela
+  // própria pessoa (via Meu Perfil, sem checagem — é sempre ela mesma).
+  //
+  // "requester" fica opcional de propósito: quando vem preenchido, checa
+  // acesso normal (chamada feita a partir de Pessoas); quando vem nulo,
+  // é a própria pessoa mexendo em si mesma (chamada feita a partir de
+  // Meu Perfil) — nesse caso não tem o que checar, ela sempre pode.
+  async addFormacao(userId: string, dto: FormacaoDto, requester: AuthUser | null) {
+    if (requester) await this.assertAccessAndGetTarget(userId, requester);
+    return this.prisma.formacao.create({
+      data: { userId, nome: dto.nome, dataConclusao: new Date(dto.dataConclusao) },
+    });
+  }
+
+  async removeFormacao(formacaoId: string, requester: AuthUser | null, selfId?: string) {
+    const formacao = await this.prisma.formacao.findUniqueOrThrow({ where: { id: formacaoId } });
+    if (requester) {
+      await this.assertAccessAndGetTarget(formacao.userId, requester);
+    } else if (formacao.userId !== selfId) {
+      // Defesa em profundidade: mesmo sem checagem de acesso normal (é a
+      // própria pessoa mexendo), nunca deixa excluir um registro que não
+      // é dela — evita adivinhar um ID de formação de outra pessoa.
+      throw new ForbiddenException('Você só pode excluir suas próprias formações.');
+    }
+    return this.prisma.formacao.delete({ where: { id: formacaoId } });
+  }
+
+  async addCertificacao(userId: string, dto: CertificacaoDto, requester: AuthUser | null) {
+    if (requester) await this.assertAccessAndGetTarget(userId, requester);
+    return this.prisma.certificacao.create({
+      data: { userId, nome: dto.nome, dataConclusao: new Date(dto.dataConclusao) },
+    });
+  }
+
+  async removeCertificacao(certificacaoId: string, requester: AuthUser | null, selfId?: string) {
+    const certificacao = await this.prisma.certificacao.findUniqueOrThrow({ where: { id: certificacaoId } });
+    if (requester) {
+      await this.assertAccessAndGetTarget(certificacao.userId, requester);
+    } else if (certificacao.userId !== selfId) {
+      throw new ForbiddenException('Você só pode excluir suas próprias certificações.');
+    }
+    return this.prisma.certificacao.delete({ where: { id: certificacaoId } });
+  }
+
   // Monta o dossiê completo — dados cadastrais + confidenciais + resumo
   // do Pulse. Nada é gerado/calculado por IA: tudo vem direto do banco.
   async getDossie(id: string, requester: AuthUser) {
-    const target = await this.assertAccessAndGetTarget(id, requester);
+    await this.assertAccessAndGetTarget(id, requester);
+    return this.assembleDossie(id);
+  }
 
-    const [fullUser, beneficios, periodosFerias, scores, latestReport, atribuicoesEspecialistas, feedbacksAvulsosRaw] =
-      await Promise.all([
+  // Visão de si mesmo (v1.5.0, pedido do Erick) — NUNCA aceita um id de
+  // outra pessoa, sempre usa o próprio id de quem está logado. Por isso
+  // não precisa (nem deve) passar pela checagem de acesso — ver o próprio
+  // dossiê é sempre permitido, pra qualquer perfil, sem exceção.
+  async getMyDossie(requesterId: string) {
+    return this.assembleDossie(requesterId);
+  }
+
+  // Montagem do dossiê em si — sem nenhuma checagem de acesso aqui de
+  // propósito; quem chama (getDossie ou getMyDossie) já decidiu se pode.
+  private async assembleDossie(id: string) {
+    const [
+      fullUser,
+      beneficios,
+      periodosFerias,
+      scores,
+      latestReport,
+      atribuicoesEspecialistas,
+      feedbacksAvulsosRaw,
+      formacoes,
+      certificacoes,
+    ] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({
         where: { id },
         include: {
@@ -171,6 +260,10 @@ class DossieService {
         take: 3,
         include: { sender: { select: { fullName: true } } },
       }),
+      // Formação e Certificações (v1.5.0) — editável pela própria pessoa
+      // OU por admin/gestor, os dois mexendo nos mesmos registros.
+      this.prisma.formacao.findMany({ where: { userId: id }, orderBy: { dataConclusao: 'desc' } }),
+      this.prisma.certificacao.findMany({ where: { userId: id }, orderBy: { dataConclusao: 'desc' } }),
     ]);
 
     // Feedbacks do ÚLTIMO relatório finalizado — visão de gestão, NOME REAL
@@ -215,6 +308,10 @@ class DossieService {
         dataInicioEmpresa: fullUser.dataInicioEmpresa,
         beneficios: beneficios.map((b) => ({ id: b.id, nome: b.nome, valor: Number(b.valor) })),
         periodosFerias: periodosFerias.map((p) => ({ id: p.id, startDate: p.startDate, endDate: p.endDate })),
+      },
+      formacaoECertificacoes: {
+        formacoes: formacoes.map((f) => ({ id: f.id, nome: f.nome, dataConclusao: f.dataConclusao })),
+        certificacoes: certificacoes.map((c) => ({ id: c.id, nome: c.nome, dataConclusao: c.dataConclusao })),
       },
       pulse: {
         ciclosParticipados: scores.length,
@@ -384,6 +481,28 @@ class DossieService {
             </tbody></table>
           </div>
 
+          <div class="secao">
+            <h2>Formação e Certificações</h2>
+            <table><thead><tr><th>Formação</th><th>Conclusão</th></tr></thead><tbody>
+              ${
+                d.formacaoECertificacoes.formacoes.length > 0
+                  ? d.formacaoECertificacoes.formacoes
+                      .map((f) => `<tr><td>${f.nome}</td><td>${fmtDate(f.dataConclusao)}</td></tr>`)
+                      .join('')
+                  : `<tr><td colspan="2" style="color:#94A3B8;">Nenhuma formação cadastrada.</td></tr>`
+              }
+            </tbody></table>
+            <table style="margin-top:14px"><thead><tr><th>Certificação</th><th>Conclusão</th></tr></thead><tbody>
+              ${
+                d.formacaoECertificacoes.certificacoes.length > 0
+                  ? d.formacaoECertificacoes.certificacoes
+                      .map((c) => `<tr><td>${c.nome}</td><td>${fmtDate(c.dataConclusao)}</td></tr>`)
+                      .join('')
+                  : `<tr><td colspan="2" style="color:#94A3B8;">Nenhuma certificação cadastrada.</td></tr>`
+              }
+            </tbody></table>
+          </div>
+
           ${
             d.atribuicoesEspecialistas.length > 0
               ? `<div class="secao">
@@ -505,11 +624,75 @@ class DossieController {
   removeVacationPeriod(@Param('periodId') periodId: string, @Req() req: { user: AuthUser }) {
     return this.service.removeVacationPeriod(periodId, req.user);
   }
+
+  @Audit(AuditAction.CADASTRO)
+  @Post(':id/formacao')
+  addFormacao(@Param('id') id: string, @Body() dto: FormacaoDto, @Req() req: { user: AuthUser }) {
+    return this.service.addFormacao(id, dto, req.user);
+  }
+
+  @Audit(AuditAction.EXCLUSAO)
+  @Delete('formacao/:formacaoId')
+  removeFormacao(@Param('formacaoId') formacaoId: string, @Req() req: { user: AuthUser }) {
+    return this.service.removeFormacao(formacaoId, req.user);
+  }
+
+  @Audit(AuditAction.CADASTRO)
+  @Post(':id/certificacao')
+  addCertificacao(@Param('id') id: string, @Body() dto: CertificacaoDto, @Req() req: { user: AuthUser }) {
+    return this.service.addCertificacao(id, dto, req.user);
+  }
+
+  @Audit(AuditAction.EXCLUSAO)
+  @Delete('certificacao/:certificacaoId')
+  removeCertificacao(@Param('certificacaoId') certificacaoId: string, @Req() req: { user: AuthUser }) {
+    return this.service.removeCertificacao(certificacaoId, req.user);
+  }
+}
+
+// "Meu Dossiê" (v1.5.0, pedido do Erick) — rota SEPARADA de propósito
+// (não é "/dossie/me", é "/meu-dossie") pra nunca colidir com a rota
+// ":id" do controller acima, que é restrita a ADMIN/GESTOR. Aberta pra
+// QUALQUER perfil (inclusive colaborador e admin) — mas SEMPRE limitada
+// a ver/editar os PRÓPRIOS dados (nunca aceita um id de outra pessoa).
+@UseGuards(JwtAuthGuard)
+@Controller('meu-dossie')
+class MeuDossieController {
+  constructor(private service: DossieService) {}
+
+  @Get()
+  getMyDossie(@Req() req: { user: AuthUser }) {
+    return this.service.getMyDossie(req.user.id);
+  }
+
+  @Audit(AuditAction.CADASTRO)
+  @Post('formacao')
+  addFormacao(@Body() dto: FormacaoDto, @Req() req: { user: AuthUser }) {
+    return this.service.addFormacao(req.user.id, dto, null);
+  }
+
+  @Audit(AuditAction.EXCLUSAO)
+  @Delete('formacao/:formacaoId')
+  removeFormacao(@Param('formacaoId') formacaoId: string, @Req() req: { user: AuthUser }) {
+    return this.service.removeFormacao(formacaoId, null, req.user.id);
+  }
+
+  @Audit(AuditAction.CADASTRO)
+  @Post('certificacao')
+  addCertificacao(@Body() dto: CertificacaoDto, @Req() req: { user: AuthUser }) {
+    return this.service.addCertificacao(req.user.id, dto, null);
+  }
+
+  @Audit(AuditAction.EXCLUSAO)
+  @Delete('certificacao/:certificacaoId')
+  removeCertificacao(@Param('certificacaoId') certificacaoId: string, @Req() req: { user: AuthUser }) {
+    return this.service.removeCertificacao(certificacaoId, null, req.user.id);
+  }
 }
 
 @Module({
   imports: [UsersModule, PulseReportsModule],
-  controllers: [DossieController],
+  controllers: [DossieController, MeuDossieController],
   providers: [DossieService],
 })
 export class DossieModule {}

@@ -915,6 +915,16 @@ Erick reportou 404 em `/api/dossie/:id` após subir o ZIP — o build tinha falh
 
 Nenhuma mudança nas 3 chamadas existentes de `generatePdf()` — confirmado que Relatórios, Ciclos (arquivamento) e Auditoria continuam passando só o HTML, herdando o comportamento de sempre automaticamente.
 
+### 5.51 v1.5.0 — "Meu Dossiê" (visão de si mesmo) + Formação e Certificações
+
+Extensão do Dossiê Confidencial: agora **todo mundo** (colaborador, gestor e admin, sem exceção — decisão deliberada de manter um padrão único, já que excluir só o admin não trazia nenhum ganho real) pode ver o **próprio** dossiê a partir de "Meu Perfil", incluindo as informações confidenciais — só não pode editar nada disso (isso continua exclusivo de admin/gestor) nem baixar PDF.
+
+**Garantia de zero impacto, pelo desenho da rota:** em vez de reaproveitar `/dossie/:id` com alguma lógica de "se for você mesmo, libera", criei uma rota **totalmente separada** (`/meu-dossie`, não `/dossie/me`) — isso evita de propósito qualquer risco de ambiguidade de rota do NestJS (um `:id` dinâmico poderia, em tese, capturar a palavra "me" antes da rota certa ser considerada). A rota `/dossie/:id` (admin/gestor) não foi tocada em nenhuma linha de comportamento — só a lógica de montagem do dossiê foi extraída pra um método privado reaproveitável (`assembleDossie`), sem checagem de acesso embutida nele; quem decide se pode ver é sempre quem chama.
+
+**Nova categoria "Formação e Certificações"** (entre Informações Confidenciais e Resumo Pulse, tela e PDF) — diferente das outras categorias confidenciais, essa é editável nos **dois** lugares: pela própria pessoa (via "Meu Perfil") e por admin/gestor (via Pessoas), os dois mexendo exatamente nos mesmos registros. Cada entrada é só "o que é" + data de conclusão (sem instituição, sem período) — Formação e Certificação como listas separadas, cada uma podendo ter vários itens.
+
+**Schema**: `Formacao` e `Certificacao`, tabelas novas e isoladas, mesmo padrão de Benefícios/Férias.
+
 ### 5.46 Correção — horários exibidos sem fuso horário explícito
 
 Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.
