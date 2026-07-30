@@ -315,4 +315,5 @@ export interface DossieData {
     ultimosFeedbacks: { tipo: string; autor: string; texto: string }[];
   };
   atribuicoesEspecialistas: string[];
+  feedbacksAvulsos: { autor: string; texto: string; data: string }[];
 }

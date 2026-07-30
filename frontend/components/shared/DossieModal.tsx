@@ -238,9 +238,9 @@ export function DossieModal({ personId, onClose }: { personId: string; onClose: 
                       <p className="text-p-primary-dark font-medium">{fmtDate(dossie.confidencial.dataInicioEmpresa)}</p>
                     </div>
 
-                    {dossie.confidencial.beneficios.length > 0 && (
-                      <div className="col-span-2">
-                        <p className="text-xs text-p-neutral mb-1">Benefícios</p>
+                    <div className="col-span-2">
+                      <p className="text-xs text-p-neutral mb-1">Benefícios</p>
+                      {dossie.confidencial.beneficios.length > 0 ? (
                         <div className="space-y-1">
                           {dossie.confidencial.beneficios.map((b) => (
                             <div key={b.id} className="flex justify-between text-p-primary-dark">
@@ -249,12 +249,14 @@ export function DossieModal({ personId, onClose }: { personId: string; onClose: 
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <p className="text-p-neutral italic">Nenhum benefício cadastrado.</p>
+                      )}
+                    </div>
 
-                    {dossie.confidencial.periodosFerias.length > 0 && (
-                      <div className="col-span-2">
-                        <p className="text-xs text-p-neutral mb-1">Períodos de Férias</p>
+                    <div className="col-span-2">
+                      <p className="text-xs text-p-neutral mb-1">Períodos de Férias</p>
+                      {dossie.confidencial.periodosFerias.length > 0 ? (
                         <div className="space-y-1">
                           {dossie.confidencial.periodosFerias.map((p) => (
                             <p key={p.id} className="text-p-primary-dark">
@@ -262,8 +264,10 @@ export function DossieModal({ personId, onClose }: { personId: string; onClose: 
                             </p>
                           ))}
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <p className="text-p-neutral italic">Nenhum período de férias cadastrado.</p>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -505,6 +509,27 @@ export function DossieModal({ personId, onClose }: { personId: string; onClose: 
                       ))}
                     </div>
                   </div>
+                )}
+              </section>
+
+              {/* Últimos feedbacks avulsos (Feedback Contínuo) */}
+              <section>
+                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-p-neutral mb-2">
+                  Últimos Feedbacks Recebidos (Avulsos)
+                </h3>
+                {dossie.feedbacksAvulsos.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {dossie.feedbacksAvulsos.map((f, i) => (
+                      <div key={i} className="border-l-2 border-blue-100 bg-slate-50 rounded-r-lg pl-3 pr-2 py-1.5">
+                        <p className="text-[11px] font-semibold text-p-primary">
+                          {f.autor} — {new Date(f.data).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+                        </p>
+                        <p className="text-xs text-p-primary-dark">{f.texto}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-p-neutral italic">Ainda não recebeu nenhum feedback avulso.</p>
                 )}
               </section>
             </>
