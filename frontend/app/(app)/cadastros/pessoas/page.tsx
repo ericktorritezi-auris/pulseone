@@ -6,6 +6,7 @@ import { api } from '../../../../lib/api';
 import { useAuth } from '../../../../lib/auth-context';
 import { Area, ManagerOption, Person, Position } from '../../../../lib/types';
 import { Drawer } from '../../../../components/shared/Drawer';
+import { DossieModal } from '../../../../components/shared/DossieModal';
 import { AvatarInitials } from '../../../../components/shared/AvatarInitials';
 import { StatusBadge } from '../../../../components/shared/StatusBadge';
 
@@ -27,6 +28,7 @@ export default function PessoasPage() {
   const [areas, setAreas] = useState<Area[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [managers, setManagers] = useState<ManagerOption[]>([]);
+  const [viewingDossieId, setViewingDossieId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -361,7 +363,11 @@ export default function PessoasPage() {
               </tr>
             )}
             {filteredPeople.map((person) => (
-              <tr key={person.id} className="border-t border-slate-100">
+              <tr
+                key={person.id}
+                className="border-t border-slate-100 cursor-pointer hover:bg-slate-50"
+                onClick={() => setViewingDossieId(person.id)}
+              >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <AvatarInitials name={person.fullName} size="sm" />
@@ -377,7 +383,7 @@ export default function PessoasPage() {
                 <td className="px-4 py-3">
                   <StatusBadge status={person.active ? 'ATIVO' : 'INATIVO'} />
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                   <div className="flex justify-end gap-2">
                     <button onClick={() => openEdit(person)} className="text-p-neutral hover:text-p-primary">
                       <Pencil size={16} />
@@ -402,6 +408,10 @@ export default function PessoasPage() {
           </tbody>
         </table>
       </div>
+
+      {viewingDossieId && (
+        <DossieModal personId={viewingDossieId} onClose={() => setViewingDossieId(null)} />
+      )}
 
       <Drawer
         open={drawerOpen}

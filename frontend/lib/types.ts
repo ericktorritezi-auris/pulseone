@@ -270,3 +270,49 @@ export interface AnnouncementItem {
   areaId?: string | null;
   area?: { name: string } | null;
 }
+
+// v1.4.0 — Dossiê Confidencial (pedido do Erick)
+export interface DossieBenefit {
+  id: string;
+  nome: string;
+  valor: number;
+}
+
+export interface DossieVacationPeriod {
+  id: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface DossieData {
+  pessoa: {
+    id: string;
+    fullName: string;
+    email: string;
+    phone: string;
+    role: string;
+    active: boolean;
+    areaName: string | null;
+    positionName: string | null;
+    managerName: string | null;
+  };
+  confidencial: {
+    salario: number | null;
+    regimeContratacao: 'CLT' | 'COOPERADO' | 'PJ' | null;
+    modalidadeTrabalho: 'PRESENCIAL' | 'REMOTO' | 'HIBRIDO' | null;
+    hibridoDiasPresencial: number | null;
+    hibridoDiasSemana: string[];
+    dataInicioEmpresa: string | null;
+    beneficios: DossieBenefit[];
+    periodosFerias: DossieVacationPeriod[];
+  };
+  pulse: {
+    ciclosParticipados: number;
+    scoreAtual: number | null;
+    evolucao: { cicloLabel: string; finalScore: number; npsScore: number }[];
+    ultimoCicloLabel: string | null;
+    ultimoParecer: string | null;
+    ultimosFeedbacks: { tipo: string; autor: string; texto: string }[];
+  };
+  atribuicoesEspecialistas: string[];
+}
