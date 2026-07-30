@@ -925,6 +925,14 @@ Extensão do Dossiê Confidencial: agora **todo mundo** (colaborador, gestor e a
 
 **Schema**: `Formacao` e `Certificacao`, tabelas novas e isoladas, mesmo padrão de Benefícios/Férias.
 
+### 5.52 Correção — datas "puras" exibindo um dia a menos
+
+Erick percebeu: campos de data sem hora (início na empresa, férias, formação, certificação, prazo do ciclo Pulse) sempre exibiam um dia **antes** do cadastrado — mas o valor salvo estava certo (confirmado ao editar).
+
+**Causa:** a correção de fuso horário da seção 5.46 aplicou `America/Sao_Paulo` em **toda** exibição de data — mas campos vindos de um `<input type="date">` (sem hora) são guardados como meia-noite UTC daquele dia. Meia-noite UTC menos 3 horas (fuso de Brasília) vira 21h do dia **anterior** — daí o "recuo" de um dia.
+
+**Correção:** essas datas puras agora exibem com `timeZone: 'UTC'` (lê o dia certo, sem conversão) — diferente de datas com **hora de verdade** (criado em, finalizado em, recebido em, comentário do NPS), que continuam corretamente em `America/Sao_Paulo`. No PDF do Dossiê, isso exigiu separar em duas funções (`fmtDateOnly` pra datas puras, `fmtDate` pra timestamps reais), já que a mesma função era reaproveitada pros dois casos — inclusive a data do feedback avulso recebido (timestamp real), que continua certa. Revisão completa de todo `toLocaleDateString` do frontend confirmou que cada uso ficou com o fuso certo pro tipo de dado.
+
 ### 5.46 Correção — horários exibidos sem fuso horário explícito
 
 Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.

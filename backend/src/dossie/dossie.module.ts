@@ -355,6 +355,14 @@ class DossieService {
   private buildDossieHtml(d: Awaited<ReturnType<DossieService['getDossie']>>): string {
     const fmtMoney = (v: number | null) =>
       v === null ? '—' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    // Datas "puras" (sem hora — início na empresa, férias, formação,
+    // certificação): o valor já representa o dia certo em UTC; aplicar o
+    // fuso de Brasília em cima "recua" um dia (meia-noite UTC vira 21h do
+    // dia anterior em Brasília). Por isso usa UTC aqui, não Brasília.
+    const fmtDateOnly = (v: Date | string | null) =>
+      v ? new Date(v).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '—';
+    // Timestamps DE VERDADE (com hora, ex: quando um feedback avulso foi
+    // recebido) continuam no fuso de Brasília normalmente.
     const fmtDate = (v: Date | string | null) =>
       v ? new Date(v).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
     const regimeLabel: Record<string, string> = { CLT: 'CLT', COOPERADO: 'Cooperado', PJ: 'Pessoa Jurídica (PJ)' };
@@ -429,7 +437,7 @@ class DossieService {
             ${d.pessoa.managerName ? `<p class="linha">Gestor direto: <b>${d.pessoa.managerName}</b></p>` : ''}
             ${
               d.confidencial.dataInicioEmpresa
-                ? `<div class="tempo-empresa">Na empresa desde <b>${fmtDate(d.confidencial.dataInicioEmpresa)}</b> — ${this.tempoDeEmpresa(new Date(d.confidencial.dataInicioEmpresa))} de casa</div>`
+                ? `<div class="tempo-empresa">Na empresa desde <b>${fmtDateOnly(d.confidencial.dataInicioEmpresa)}</b> — ${this.tempoDeEmpresa(new Date(d.confidencial.dataInicioEmpresa))} de casa</div>`
                 : ''
             }
           </div>
@@ -461,7 +469,7 @@ class DossieService {
                   ? ` (${d.confidencial.hibridoDiasPresencial}x/semana${d.confidencial.hibridoDiasSemana.length ? ': ' + d.confidencial.hibridoDiasSemana.map((x) => diaLabel[x] ?? x).join(', ') : ''})`
                   : ''
               }</p></div>
-              <div class="campo"><p class="l">Data de Início na Empresa</p><p class="v">${fmtDate(d.confidencial.dataInicioEmpresa)}</p></div>
+              <div class="campo"><p class="l">Data de Início na Empresa</p><p class="v">${fmtDateOnly(d.confidencial.dataInicioEmpresa)}</p></div>
             </div>
 
             <table style="margin-top:14px"><thead><tr><th>Benefício</th><th>Valor</th></tr></thead><tbody>
@@ -475,7 +483,7 @@ class DossieService {
             <table style="margin-top:14px"><thead><tr><th>Período de Férias</th></tr></thead><tbody>
               ${
                 d.confidencial.periodosFerias.length > 0
-                  ? d.confidencial.periodosFerias.map((p) => `<tr><td>${fmtDate(p.startDate)} a ${fmtDate(p.endDate)}</td></tr>`).join('')
+                  ? d.confidencial.periodosFerias.map((p) => `<tr><td>${fmtDateOnly(p.startDate)} a ${fmtDateOnly(p.endDate)}</td></tr>`).join('')
                   : `<tr><td style="color:#94A3B8;">Nenhum período de férias cadastrado.</td></tr>`
               }
             </tbody></table>
@@ -487,7 +495,7 @@ class DossieService {
               ${
                 d.formacaoECertificacoes.formacoes.length > 0
                   ? d.formacaoECertificacoes.formacoes
-                      .map((f) => `<tr><td>${f.nome}</td><td>${fmtDate(f.dataConclusao)}</td></tr>`)
+                      .map((f) => `<tr><td>${f.nome}</td><td>${fmtDateOnly(f.dataConclusao)}</td></tr>`)
                       .join('')
                   : `<tr><td colspan="2" style="color:#94A3B8;">Nenhuma formação cadastrada.</td></tr>`
               }
@@ -496,7 +504,7 @@ class DossieService {
               ${
                 d.formacaoECertificacoes.certificacoes.length > 0
                   ? d.formacaoECertificacoes.certificacoes
-                      .map((c) => `<tr><td>${c.nome}</td><td>${fmtDate(c.dataConclusao)}</td></tr>`)
+                      .map((c) => `<tr><td>${c.nome}</td><td>${fmtDateOnly(c.dataConclusao)}</td></tr>`)
                       .join('')
                   : `<tr><td colspan="2" style="color:#94A3B8;">Nenhuma certificação cadastrada.</td></tr>`
               }
