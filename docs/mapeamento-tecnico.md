@@ -905,6 +905,16 @@ Funcionalidade nova e substancial, mantendo a mesma disciplina de "zero impacto"
 
 Erick reportou 404 em `/api/dossie/:id` após subir o ZIP — o build tinha falhado silenciosamente pro usuário final (o deploy anterior continuou rodando). Causa: `PulseFeedback.comment` é opcional no schema (`String?`), mas o código declarava `ultimosFeedbacks` com um tipo explícito exigindo `texto: string` (sempre presente) — erro que só aparece no build real (com o Prisma Client de verdade gerado), não no ambiente local de teste, que não tem esse client instalado. Corrigido com fallback (`fb.comment ?? '(sem comentário)'`). Revisão manual completa do restante do arquivo confirmou que essa era a única ocorrência desse padrão.
 
+### 5.50 Quatro ajustes finos no Dossiê (pedido do Erick, após primeiro teste real)
+
+1. **Benefícios e Férias sempre visíveis** — antes, essas seções só apareciam se houvesse algum registro (senão simplesmente não existiam na tela nem no PDF, o que confundia). Agora aparecem sempre, com "Nenhum benefício/período cadastrado" quando vazias — tanto na tela quanto no PDF.
+
+2. **Margem superior do PDF (mínimo 2,5cm em todas as páginas) — achado técnico importante:** a primeira tentativa (`@page { margin }` no CSS) não teria efeito nenhum — o `generatePdf()` (compartilhado com Relatórios e Auditoria) já define a margem **na própria chamada do Puppeteer**, que sempre sobrepõe `@page` do CSS quando as duas existem. Corrigido oferecendo um **parâmetro opcional de margem** em `generatePdf(html, margin?)`, com valor padrão **idêntico ao de sempre** (20px em tudo) — Relatórios, Auditoria e o PDF de arquivamento de ciclo continuam chamando sem esse parâmetro, portanto idênticos a antes. Só o Dossiê passa a margem customizada (2,5cm no topo). A capa (antes "sangrada" até a borda da página) foi redesenhada como um painel arredondado, contido dentro da margem — mantém o visual marcante sem depender de margem zero.
+
+3. **Últimos feedbacks avulsos recebidos** (Feedback Contínuo, não Pulse) — nova seção no PDF **e** na tela, com os 3 mais recentes, autor, texto e data.
+
+Nenhuma mudança nas 3 chamadas existentes de `generatePdf()` — confirmado que Relatórios, Ciclos (arquivamento) e Auditoria continuam passando só o HTML, herdando o comportamento de sempre automaticamente.
+
 ### 5.46 Correção — horários exibidos sem fuso horário explícito
 
 Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.

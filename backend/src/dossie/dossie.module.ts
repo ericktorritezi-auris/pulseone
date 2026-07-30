@@ -136,7 +136,8 @@ class DossieService {
   async getDossie(id: string, requester: AuthUser) {
     const target = await this.assertAccessAndGetTarget(id, requester);
 
-    const [fullUser, beneficios, periodosFerias, scores, latestReport, atribuicoesEspecialistas] = await Promise.all([
+    const [fullUser, beneficios, periodosFerias, scores, latestReport, atribuicoesEspecialistas, feedbacksAvulsosRaw] =
+      await Promise.all([
       this.prisma.user.findUniqueOrThrow({
         where: { id },
         include: {
@@ -162,6 +163,13 @@ class DossieService {
       this.prisma.specialistAssignment.findMany({
         where: { userId: id, active: true },
         orderBy: { createdAt: 'asc' },
+      }),
+      // Feedback Contínuo (avulso) recebido — os 3 últimos, pedido do Erick.
+      this.prisma.feedback.findMany({
+        where: { receiverId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+        include: { sender: { select: { fullName: true } } },
       }),
     ]);
 
@@ -217,13 +225,18 @@ class DossieService {
         ultimosFeedbacks,
       },
       atribuicoesEspecialistas: atribuicoesEspecialistas.map((a) => a.description),
+      feedbacksAvulsos: feedbacksAvulsosRaw.map((f) => ({
+        autor: f.sender.fullName,
+        texto: f.text,
+        data: f.createdAt,
+      })),
     };
   }
 
   async getDossiePdf(id: string, requester: AuthUser): Promise<Buffer> {
     const dossie = await this.getDossie(id, requester);
     const html = this.buildDossieHtml(dossie);
-    return this.pdfService.generatePdf(html);
+    return this.pdfService.generatePdf(html, { top: '2.5cm', bottom: '1.8cm', left: '1.8cm', right: '1.8cm' });
   }
 
   private tempoDeEmpresa(dataInicio: Date | null): string {
@@ -262,13 +275,15 @@ class DossieService {
       <head>
         <meta charset="utf-8" />
         <style>
-          @page { margin: 0; }
+          /* Margem real controlada na chamada do Puppeteer (generatePdf),
+             não aqui — @page margin seria sobrescrito por ela mesmo assim. */
           * { box-sizing: border-box; }
           body { font-family: Arial, Helvetica, sans-serif; color: #0F172A; margin: 0; }
 
           .capa {
-            width: 100%; height: 100vh; padding: 80px 60px;
+            width: 100%; min-height: 23cm; padding: 50px 45px;
             background: linear-gradient(135deg, #0F172A 0%, #2563EB 100%);
+            border-radius: 18px;
             color: white; page-break-after: always;
             display: flex; flex-direction: column; justify-content: space-between;
           }
@@ -284,7 +299,7 @@ class DossieService {
           }
           .capa .rodape { font-size: 11px; color: #93C5FD; }
 
-          .pagina { padding: 40px 50px; }
+          .pagina { padding: 0 0 20px 0; }
           .secao { margin-bottom: 28px; page-break-inside: avoid; }
           .secao h2 {
             font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #2563EB;
@@ -352,21 +367,21 @@ class DossieService {
               <div class="campo"><p class="l">Data de Início na Empresa</p><p class="v">${fmtDate(d.confidencial.dataInicioEmpresa)}</p></div>
             </div>
 
-            ${
-              d.confidencial.beneficios.length > 0
-                ? `<table style="margin-top:14px"><thead><tr><th>Benefício</th><th>Valor</th></tr></thead><tbody>
-                    ${d.confidencial.beneficios.map((b) => `<tr><td>${b.nome}</td><td>${fmtMoney(b.valor)}</td></tr>`).join('')}
-                  </tbody></table>`
-                : ''
-            }
+            <table style="margin-top:14px"><thead><tr><th>Benefício</th><th>Valor</th></tr></thead><tbody>
+              ${
+                d.confidencial.beneficios.length > 0
+                  ? d.confidencial.beneficios.map((b) => `<tr><td>${b.nome}</td><td>${fmtMoney(b.valor)}</td></tr>`).join('')
+                  : `<tr><td colspan="2" style="color:#94A3B8;">Nenhum benefício cadastrado.</td></tr>`
+              }
+            </tbody></table>
 
-            ${
-              d.confidencial.periodosFerias.length > 0
-                ? `<table style="margin-top:14px"><thead><tr><th>Período de Férias</th></tr></thead><tbody>
-                    ${d.confidencial.periodosFerias.map((p) => `<tr><td>${fmtDate(p.startDate)} a ${fmtDate(p.endDate)}</td></tr>`).join('')}
-                  </tbody></table>`
-                : ''
-            }
+            <table style="margin-top:14px"><thead><tr><th>Período de Férias</th></tr></thead><tbody>
+              ${
+                d.confidencial.periodosFerias.length > 0
+                  ? d.confidencial.periodosFerias.map((p) => `<tr><td>${fmtDate(p.startDate)} a ${fmtDate(p.endDate)}</td></tr>`).join('')
+                  : `<tr><td style="color:#94A3B8;">Nenhum período de férias cadastrado.</td></tr>`
+              }
+            </tbody></table>
           </div>
 
           ${
@@ -410,6 +425,20 @@ class DossieService {
                      .map((f) => `<div class="feedback"><p class="autor">${f.autor}</p><p class="texto">${f.texto}</p></div>`)
                      .join('')}`
                 : ''
+            }
+          </div>
+
+          <div class="secao">
+            <h2>Últimos Feedbacks Recebidos (Avulsos)</h2>
+            ${
+              d.feedbacksAvulsos.length > 0
+                ? d.feedbacksAvulsos
+                    .map(
+                      (f) =>
+                        `<div class="feedback"><p class="autor">${f.autor} — ${fmtDate(f.data)}</p><p class="texto">${f.texto}</p></div>`,
+                    )
+                    .join('')
+                : '<p style="font-size:12px;color:#64748B;">Ainda não recebeu nenhum feedback avulso.</p>'
             }
           </div>
         </div>

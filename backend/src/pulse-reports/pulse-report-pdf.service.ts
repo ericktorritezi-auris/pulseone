@@ -147,7 +147,18 @@ export class PulseReportPdfService {
 </html>`;
   }
 
-  async generatePdf(html: string): Promise<Buffer> {
+  // Margem opcional (v1.4.0, Dossiê): quem não passar nada recebe
+  // EXATAMENTE a margem de sempre (20px em tudo) — Relatórios e Auditoria
+  // continuam idênticos, sem precisar mudar a chamada deles.
+  async generatePdf(
+    html: string,
+    margin: { top: string; bottom: string; left: string; right: string } = {
+      top: '20px',
+      bottom: '20px',
+      left: '20px',
+      right: '20px',
+    },
+  ): Promise<Buffer> {
     // Estratégia combinada, depois de vários diagnósticos em produção:
     // - O Chromium do SISTEMA (instalado via apt, ver railpack.json) resolveu
     //   as bibliotecas que faltavam (libnss3 etc.), mas o binário em si não é
@@ -205,7 +216,7 @@ export class PulseReportPdfService {
       const pdf = await page.pdf({
         format: 'A4',
         printBackground: true,
-        margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' },
+        margin,
       });
       return Buffer.from(pdf);
     } catch (err) {
