@@ -15,6 +15,7 @@ import {
   UserPlus,
   ScrollText,
   ShieldCheck,
+  Smile,
 } from 'lucide-react';
 import { useAuth } from '../../../lib/auth-context';
 import { ManualSection, MockScreen } from '../../../components/shared/ManualSection';
@@ -45,6 +46,12 @@ export default function ManualPage() {
             pra trocar a senha antes de continuar — é só digitar a senha atual, escolher uma nova
             (mínimo 8 caracteres, com 1 letra maiúscula e 1 caractere especial, tipo <code>!</code>{' '}
             ou <code>@</code>) e confirmar.
+          </p>
+          <p>
+            De vez em quando (se o admin tiver disparado uma pesquisa), pode aparecer uma pergunta
+            rápida logo depois do login: "De 0 a 10, o quanto você recomendaria o PulseOne?" — é
+            totalmente anônima, e leva 10 segundos. Se não quiser responder agora, clique em "Agora
+            não" — ela volta a aparecer no próximo login, até você responder de verdade.
           </p>
         </ManualSection>
 
@@ -79,13 +86,20 @@ export default function ManualPage() {
               <b>Gestor:</b> tudo isso, mais um resumo <b>por área</b> — se você atua em mais de uma
               área, cada uma aparece separada, com quantidade de colaboradores, score médio e NPS
               médio próprios. Tem também um painel de "como cada área te avaliou" (informativo — seu
-              score oficial continua sendo um número único).
+              score oficial continua sendo um número único), e um card mostrando quantos{' '}
+              <b>Especialistas com Atribuições</b> existem, com um link direto pra consultar.
             </li>
             <li>
-              <b>Admin:</b> um resumo geral do sistema — áreas, cargos e pulsos cadastrados, o pulso
-              vigente, participação e pendências. Sem NPS/score aqui (isso é papel do gestor).
+              <b>Admin:</b> um resumo geral do sistema — áreas, cargos e pulsos cadastrados, e a
+              lista de <b>Ciclos Abertos</b> no momento (pode ter mais de um ao mesmo tempo, um por
+              área — cada um mostra sua própria participação e pendências). Sem NPS/score aqui (isso
+              é papel do gestor).
             </li>
           </ul>
+          <p>
+            Se algum admin ou gestor publicar um <b>Comunicado</b>, ele aparece como uma faixa
+            amarela no topo do painel de todo mundo, enquanto estiver ativo.
+          </p>
           <MockScreen label="dashboard" />
         </ManualSection>
 
@@ -168,6 +182,24 @@ export default function ManualPage() {
             Também é aqui que você <b>troca a própria senha</b> — precisa digitar a senha atual e
             escolher uma nova. Isso vale pra qualquer pessoa, incluindo admin.
           </p>
+          <p>
+            O botão <b>Dados Completos</b> abre o seu próprio dossiê — os mesmos dados que
+            admin/gestor veem sobre você (dados cadastrais, informações confidenciais como salário e
+            benefícios, formação e certificações, e um resumo do seu histórico no Pulse). Você
+            consegue <b>ver tudo</b>, inclusive as informações confidenciais, mas só consegue{' '}
+            <b>editar a parte de Formação e Certificações</b> — o resto é só leitura (quem cadastra
+            e edita as informações confidenciais é sempre admin/gestor). Também não tem botão de
+            baixar PDF aqui — isso é exclusivo de quem gerencia.
+          </p>
+        </ManualSection>
+
+        <ManualSection icon={Users} title="Atribuições Especialistas" subtitle="Pra quem escalar cada assunto">
+          <p>
+            Cadastro de "quem é responsável por qual assunto" na empresa — útil pra saber pra quem
+            encaminhar uma dúvida ou solicitação. Qualquer pessoa pode <b>consultar</b>: clique no
+            nome de alguém na lista pra ver as atribuições completas dela num modal, e feche quando
+            terminar. Só admin e gestor podem <b>cadastrar, editar ou inativar</b> um registro.
+          </p>
         </ManualSection>
 
         {/* ===================== GESTOR ===================== */}
@@ -178,7 +210,9 @@ export default function ManualPage() {
               <p>
                 Vá em <b>Pessoas</b>, no menu lateral, e clique em <b>Cadastrar Pessoa</b>. A lista
                 mostra todo mundo das áreas em que você atua — se você é gestor de mais de uma área,
-                aparece gente de todas elas juntas, não só de uma.
+                aparece gente de todas elas juntas, não só de uma. Use os filtros de <b>Área</b> e{' '}
+                <b>Cargo</b> no topo da tela pra encontrar alguém mais rápido (o de Cargo se ajusta
+                conforme a área escolhida).
               </p>
               <ol className="list-decimal list-inside space-y-1 pl-2">
                 <li>Preencha nome, e-mail, telefone.</li>
@@ -206,6 +240,68 @@ export default function ManualPage() {
               <p>
                 <b>Reativar alguém:</b> uma pessoa inativada continua na lista, com um botão de
                 reativar no lugar do de excluir — o histórico dela nunca é apagado.
+              </p>
+              <p>
+                <b>Clique em qualquer linha da lista</b> (fora dos botões de ação) pra abrir o{' '}
+                <b>Dossiê</b> completo dessa pessoa — veja a seção "Dossiê do Colaborador" logo
+                abaixo pra entender o que tem lá.
+              </p>
+            </ManualSection>
+
+            <ManualSection icon={FileText} title="Dossiê do Colaborador" subtitle="Visão completa de RH e Pulse">
+              <p>
+                Clicando em qualquer pessoa na tela de Pessoas, abre um dossiê completo, organizado
+                por seções:
+              </p>
+              <ul className="list-disc list-inside space-y-1 pl-2">
+                <li><b>Dados Cadastrais</b> — e-mail, telefone, cargo, área, gestor direto, status.</li>
+                <li>
+                  <b>Informações Confidenciais</b> (uso interno, visível só pra admin/gestor) —
+                  salário, benefícios, períodos de férias, regime de contratação (CLT, Cooperado ou
+                  PJ), modalidade de trabalho (Presencial, Remoto ou Híbrido) e data de início na
+                  empresa. Clique em <b>Editar</b> pra atualizar — todos os campos são opcionais.
+                </li>
+                <li>
+                  <b>Formação e Certificações</b> — só "o que é" (ex: "Análise de Sistemas") e a data
+                  de conclusão, sem instituição nem período. Pode cadastrar quantas quiser.
+                </li>
+                <li>
+                  <b>Atribuições Especialistas</b> — se a pessoa tiver algum registro ativo naquela
+                  funcionalidade, aparece aqui também.
+                </li>
+                <li>
+                  <b>Resumo Pulse</b> — quantos ciclos ela já participou, o score atual, a evolução
+                  ao longo do tempo, o parecer final e os principais feedbacks recebidos no{' '}
+                  <b>último</b> ciclo (aqui aparecem os nomes reais de quem avaliou, diferente da
+                  visão anonimizada que a própria pessoa tem de si mesma).
+                </li>
+                <li>Os 3 últimos feedbacks avulsos (Feedback Contínuo) que ela recebeu.</li>
+              </ul>
+              <p>
+                Clique em <b>Baixar PDF</b> pra gerar um documento completo, com capa (nome, cargo,
+                área, gestor e tempo de casa) — pronto pra imprimir ou enviar, por exemplo, pra
+                justificar um pedido de aumento ou benefício junto ao RH.
+              </p>
+              <p>
+                <b>Avisos automáticos:</b> sempre que você faz login, o sistema confere se alguma
+                pessoa que você acessa está prestes a sair de férias (até 30 dias de antecedência) ou
+                completando aniversário de empresa hoje — se for o caso, aparece uma notificação no
+                sininho.
+              </p>
+            </ManualSection>
+
+            <ManualSection icon={Send} title="Comunicados" subtitle="Avisos gerais, geral ou por área">
+              <p>
+                Escreva um aviso que aparece como uma faixa no topo do painel de todo mundo (ou só de
+                uma área, se você preferir). Ao criar, escolha entre <b>Geral</b> (todo mundo vê) ou{' '}
+                <b>Só uma área</b> — se você for gestor, só pode escolher entre as áreas que já
+                gerencia; admin pode escolher qualquer uma.
+              </p>
+              <p>
+                Um comunicado <b>ativo</b> aparece na faixa; um <b>inativado</b> some de lá, mas
+                continua guardado na lista pra consulta futura — só o botão <b>Excluir</b> apaga de
+                vez. Ao criar um comunicado novo, os colaboradores alcançados recebem um e-mail
+                avisando.
               </p>
             </ManualSection>
 
@@ -284,12 +380,19 @@ export default function ManualPage() {
             </ManualSection>
 
             <ManualSection icon={RefreshCw} title="Ciclos Pulse" subtitle="Abrindo e encerrando avaliações">
-              <p>É aqui que você controla o calendário de avaliações da empresa inteira:</p>
+              <p>É aqui que você controla o calendário de avaliações da empresa:</p>
               <ol className="list-decimal list-inside space-y-1 pl-2">
-                <li>Clique em <b>Novo Ciclo</b>, dê um nome (ex: "Pulse Julho/2026").</li>
                 <li>
-                  Clique em <b>Abrir Ciclo</b> — isso gera automaticamente todas as avaliações de
-                  todo mundo <b>e dispara um e-mail</b> pra cada pessoa com avaliação pendente.
+                  Clique em <b>Novo Ciclo</b>, dê um nome (ex: "Pulse Julho/2026") e escolha o
+                  alcance: <b>Geral</b> (todas as áreas de uma vez) ou <b>Só uma área</b> (escolhendo
+                  qual). Dá pra ter ciclos de áreas diferentes abertos ao mesmo tempo, em momentos
+                  diferentes — útil quando uma área acabou de ser criada e ainda não deve entrar no
+                  ciclo, por exemplo.
+                </li>
+                <li>
+                  Clique em <b>Abrir Ciclo</b> — isso gera automaticamente as avaliações de quem faz
+                  parte do alcance escolhido <b>e dispara um e-mail</b> pra cada pessoa com avaliação
+                  pendente.
                 </li>
                 <li>Acompanhe o progresso clicando em <b>Ver Progresso</b>.</li>
                 <li>Quando achar que já deu tempo suficiente, clique em <b>Encerrar Ciclo</b>.</li>
@@ -322,7 +425,32 @@ export default function ManualPage() {
               <p>
                 Registro de tudo que acontece no sistema — quem fez o quê e quando: login, logout,
                 cadastros, edições, exclusões, feedbacks, fechamentos de ciclo, geração de análises e de
-                PDF. Dá pra filtrar por tipo de ação.
+                PDF. Dá pra filtrar por tipo de ação, e a lista é paginada (20 registros por vez).
+              </p>
+              <p>
+                Use os botões <b>CSV</b>, <b>Excel</b> ou <b>PDF</b> pra exportar — a exportação traz
+                todos os registros que batem com o filtro escolhido na tela (não só a página atual).
+              </p>
+            </ManualSection>
+
+            <ManualSection icon={Smile} title="NPS do Sistema" subtitle="O quanto recomendam o PulseOne">
+              <p>
+                Diferente do NPS de pessoas (que já existe dentro do Pulse), esse mede o quanto os
+                usuários recomendam o <b>próprio sistema</b>. Você (admin) nunca participa — nem
+                responde, nem entra na contagem.
+              </p>
+              <p>
+                Clique em <b>Disparar Pesquisa NPS</b> quando quiser lançar uma nova rodada — a
+                partir daí, todo colaborador/gestor vê uma pergunta rápida (nota de 0 a 10 + um
+                comentário opcional) no próximo login, até responder. Clicar em "Agora não" não conta
+                como resposta — a pergunta volta a aparecer nos logins seguintes até a pessoa
+                responder de verdade.
+              </p>
+              <p>
+                O painel mostra o NPS <b>acumulado de todas as campanhas já disparadas</b> (promotores,
+                neutros, detratores) e os comentários — sempre anônimos, sem nenhum vínculo com quem
+                respondeu. Já a contagem de "quantos já responderam" é sempre só da{' '}
+                <b>campanha mais recente</b>, reiniciando sozinha a cada disparo novo.
               </p>
             </ManualSection>
 
