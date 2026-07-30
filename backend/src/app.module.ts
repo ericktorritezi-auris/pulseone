@@ -19,6 +19,7 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { SystemNpsModule } from './system-nps/system-nps.module';
 import { SpecialistAssignmentsModule } from './specialist-assignments/specialist-assignments.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { DossieModule } from './dossie/dossie.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
     SystemNpsModule,
     SpecialistAssignmentsModule,
     AnnouncementsModule,
+    DossieModule,
   ],
   providers: [
     {

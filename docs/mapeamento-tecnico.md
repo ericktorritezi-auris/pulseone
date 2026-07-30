@@ -880,6 +880,27 @@ Sem mudança nenhuma no dashboard do admin, nem em nenhuma regra de permissão (
 - **Decisão deliberada**: não usei o endpoint `/areas` (que já existe) pra listar as áreas elegíveis — ele já é consumido por outras telas (Pessoas, Cargos) de um jeito que uma mudança de escopo quebraria. Criei uma rota nova e dedicada só pra isso, zero risco pro que já funciona.
 - Formulário de criação ganhou o mesmo seletor "Geral / Só uma área"; edição continua só alterando o texto (a área é definida na criação, sem caminho de mudança depois — mesmo limite já existente no backend).
 
+### 5.48 Dossiê Confidencial do Colaborador (v1.4.0, pedido do Erick)
+
+Funcionalidade nova e substancial, mantendo a mesma disciplina de "zero impacto" das rodadas anteriores — tudo em tabelas/rotas isoladas, nenhuma tela existente teve o comportamento alterado (só ganhou um clique a mais).
+
+**Confidencialidade, garantida estruturalmente, não só escondida:** os campos novos (salário, benefícios, férias, regime de contratação, modalidade de trabalho, data de início na empresa) e o próprio Dossiê só são acessíveis via rotas que reaproveitam **a mesma checagem de acesso já usada em Pessoas** (`UsersService.assertCanAccessTarget`, que precisou virar público — só mudança de visibilidade, nenhuma linha de lógica alterada). Como a tela de Pessoas já é inacessível pra colaborador (nem o menu aparece, nem a rota aceita esse papel), os dados confidenciais nunca chegam perto de nenhum endpoint que um colaborador consiga chamar, nem mesmo sobre si mesmo.
+
+**Schema (tudo novo, tudo opcional — sem risco pra cadastro/edição de pessoa que já existe):**
+- Campos no `User`: `salario`, `regimeContratacao` (CLT/Cooperado/PJ), `modalidadeTrabalho` (Presencial/Remoto/Híbrido), `hibridoDiasPresencial`, `hibridoDiasSemana`, `dataInicioEmpresa`.
+- `Benefit` e `VacationPeriod`: tabelas novas, cada pessoa pode ter vários registros.
+- `MilestoneNotified`: controle de "já avisei sobre isso" pros avisos de férias/aniversário — por destinatário (cada admin/gestor risca a própria cópia), sem repetir o mesmo aviso.
+
+**Módulo novo `dossie.module.ts`**: monta o dossiê completo (dados cadastrais + confidenciais + resumo Pulse — ciclos participados, score atual, evolução histórica, parecer final e feedbacks do **último ciclo com nome real** de quem avaliou, já que é visão interna de gestão, diferente da visão anonimizada que o próprio colaborador tem). Nada é gerado por IA — tudo vem direto do banco, como pedido.
+
+**PDF com capa**: reaproveita `PulseReportPdfService.generatePdf(html)` já existente (sem alterar uma linha dele) — HTML novo com capa em destaque (nome, cargo, área, gestor, tempo de casa calculado a partir da data de início) seguida das seções organizadas, no mesmo padrão visual do resto do sistema.
+
+**Avisos de férias/aniversário de empresa**: mesmo mecanismo já usado no NPS do Sistema — checagem no login do admin/gestor (sem nenhum agendamento automático novo, menor risco). Férias avisadas com até 30 dias de antecedência; aniversário de empresa avisado no dia exato, calculando os anos completos.
+
+**Frontend**: `DossieModal` (novo componente) — clicar na **linha** da pessoa em Pessoas abre o dossiê (view + edição das informações confidenciais + baixar PDF); os botões de ação já existentes (editar/inativar/excluir) ganharam `stopPropagation` pra continuarem funcionando normalmente, sem abrir o modal por engano — mesmo padrão já usado com sucesso em Atribuições Especialistas.
+
+**Complemento (mesma entrega):** seção **"Atribuições Especialistas"** adicionada ao Dossiê (tela e PDF) — mostra a descrição cadastrada na funcionalidade da v1.1.0, se a pessoa tiver algum registro **ativo** lá (mesmo critério da tela de consulta pública). Some por completo, sem espaço vazio nem erro, se não houver nenhuma.
+
 ### 5.46 Correção — horários exibidos sem fuso horário explícito
 
 Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.

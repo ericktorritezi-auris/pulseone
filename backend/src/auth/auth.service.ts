@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ResendService } from './resend.service';
 import { UsersService } from '../users/users.module';
 import { SystemNpsService } from '../system-nps/system-nps.module';
-import { AuditAction } from '@prisma/client';
+import { AuditAction, UserRole } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -89,6 +89,16 @@ export class AuthService {
     // dentro do próprio service).
     const pendingSystemNps = await this.systemNps.hasPendingSurvey(user.id, user.role);
 
+    // Avisos de férias próximas e aniversário de empresa (v1.4.0, pedido do
+    // Erick) — só pra admin/gestor, mesmo padrão do NPS (checagem no login,
+    // sem precisar de nenhum agendamento automático novo). Best-effort:
+    // uma falha aqui nunca pode impedir o login de acontecer.
+    try {
+      await this.checkMilestoneNotifications(user.id, user.role);
+    } catch (err) {
+      console.error('Falha ao checar avisos de férias/aniversário:', err);
+    }
+
     return {
       accessToken,
       mustChangePwd: user.mustChangePwd,
@@ -103,6 +113,108 @@ export class AuthService {
         positionName: user.position?.name ?? null,
       },
     };
+  }
+
+  /**
+   * Avisos de férias próximas (30 dias) e aniversário de empresa (v1.4.0,
+   * pedido do Erick). Cada admin/gestor recebe sua PRÓPRIA notificação
+   * (registro isolado em MilestoneNotified), pras pessoas que ele já pode
+   * acessar hoje — admin vê todo mundo, gestor só quem gerencia. Nunca
+   * repete o mesmo aviso pro mesmo destinatário.
+   */
+  private async checkMilestoneNotifications(recipientId: string, role: UserRole) {
+    if (role !== UserRole.ADMIN && role !== UserRole.GESTOR) return;
+
+    const areaIds =
+      role === UserRole.GESTOR
+        ? (
+            await this.prisma.user.findUnique({
+              where: { id: recipientId },
+              select: { managedAreas: { select: { id: true } } },
+            })
+          )?.managedAreas.map((a) => a.id) ?? []
+        : undefined; // admin: sem filtro de área, vê todo mundo
+
+    const people = await this.prisma.user.findMany({
+      where: {
+        active: true,
+        role: { not: UserRole.ADMIN },
+        ...(areaIds ? { areaId: { in: areaIds } } : {}),
+      },
+      select: { id: true, fullName: true, dataInicioEmpresa: true },
+    });
+    const peopleIds = people.map((p) => p.id);
+
+    const hoje = new Date();
+    const em30Dias = new Date();
+    em30Dias.setDate(hoje.getDate() + 30);
+
+    // Férias começando nos próximos 30 dias
+    const feriasProximas = await this.prisma.vacationPeriod.findMany({
+      where: { userId: { in: peopleIds }, startDate: { gte: hoje, lte: em30Dias } },
+    });
+
+    for (const periodo of feriasProximas) {
+      const jaAvisado = await this.prisma.milestoneNotified.findUnique({
+        where: {
+          recipientId_subjectUserId_type_referenceDate: {
+            recipientId,
+            subjectUserId: periodo.userId,
+            type: 'FERIAS',
+            referenceDate: periodo.startDate,
+          },
+        },
+      });
+      if (jaAvisado) continue;
+
+      const pessoa = people.find((p) => p.id === periodo.userId);
+      await this.prisma.notification.create({
+        data: {
+          userId: recipientId,
+          title: 'Férias se aproximando',
+          message: `${pessoa?.fullName ?? 'Alguém'} sai de férias em ${periodo.startDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.`,
+        },
+      });
+      await this.prisma.milestoneNotified.create({
+        data: { recipientId, subjectUserId: periodo.userId, type: 'FERIAS', referenceDate: periodo.startDate },
+      });
+    }
+
+    // Aniversário de empresa — hoje é o dia (mês e dia batem com a data de início)
+    for (const pessoa of people) {
+      if (!pessoa.dataInicioEmpresa) continue;
+      const inicio = new Date(pessoa.dataInicioEmpresa);
+      const mesmoDia = inicio.getDate() === hoje.getDate() && inicio.getMonth() === hoje.getMonth();
+      const anos = hoje.getFullYear() - inicio.getFullYear();
+      if (!mesmoDia || anos < 1) continue;
+
+      // Referência única por ano — evita repetir no mesmo dia em logins diferentes,
+      // mas permite avisar de novo no aniversário do ano seguinte.
+      const referenceDate = new Date(Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()));
+
+      const jaAvisado = await this.prisma.milestoneNotified.findUnique({
+        where: {
+          recipientId_subjectUserId_type_referenceDate: {
+            recipientId,
+            subjectUserId: pessoa.id,
+            type: 'ANIVERSARIO_EMPRESA',
+            referenceDate,
+          },
+        },
+      });
+      if (jaAvisado) continue;
+
+      await this.prisma.notification.create({
+        data: {
+          userId: recipientId,
+          title: 'Aniversário de empresa 🎉',
+          message: `Hoje ${pessoa.fullName} completa ${anos} ano${anos > 1 ? 's' : ''} de empresa!`,
+        },
+      });
+      await this.prisma.milestoneNotified.create({
+        data: { recipientId, subjectUserId: pessoa.id, type: 'ANIVERSARIO_EMPRESA', referenceDate },
+      });
+    }
   }
 
   async sendEmailVerification(userId: string) {

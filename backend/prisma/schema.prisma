@@ -57,6 +57,19 @@ enum AuditAction {
   GERACAO_PDF
 }
 
+// v1.4.0 — Dossiê confidencial (pedido do Erick)
+enum RegimeContratacao {
+  CLT
+  COOPERADO
+  PJ
+}
+
+enum ModalidadeTrabalho {
+  PRESENCIAL
+  REMOTO
+  HIBRIDO
+}
+
 // ==========================
 // ENTIDADES PRINCIPAIS
 // ==========================
@@ -92,6 +105,19 @@ model User {
   // restrita à mesma área (seção 5.7 + correção da seção 5.25).
   managedAreas  Area[]     @relation("GestorAreas")
   specialistAssignments SpecialistAssignment[]
+
+  // v1.4.0 — Dossiê confidencial (pedido do Erick): visível/editável só
+  // por ADMIN/GESTOR, NUNCA pelo colaborador. Todos os campos são
+  // opcionais de propósito — o gestor preenche por vontade própria, e o
+  // cadastro/edição de pessoa nunca quebra por falta deles.
+  salario               Decimal?            @db.Decimal(12, 2)
+  regimeContratacao     RegimeContratacao?
+  modalidadeTrabalho    ModalidadeTrabalho?
+  hibridoDiasPresencial Int?
+  hibridoDiasSemana     String[]            @default([])
+  dataInicioEmpresa     DateTime?
+  beneficios            Benefit[]
+  periodosFerias        VacationPeriod[]
   announcements         Announcement[]
   active        Boolean    @default(true)
   createdAt     DateTime   @default(now())
@@ -402,4 +428,43 @@ model Announcement {
   // PulseCycle.areaId: nenhum comunicado já publicado muda de comportamento.
   areaId String?
   area   Area?   @relation(fields: [areaId], references: [id])
+}
+
+// ==========================
+// v1.4.0 — DOSSIÊ CONFIDENCIAL (pedido do Erick)
+// ==========================
+// Benefício e Período de Férias — cada pessoa pode ter vários. Tabelas
+// isoladas, sem vínculo nenhum com Pulse/ciclos — só informativo, visível
+// só por ADMIN/GESTOR.
+model Benefit {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  nome      String
+  valor     Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+}
+
+model VacationPeriod {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+}
+
+// Controle de "já avisei sobre isso" pros avisos de férias/aniversário de
+// empresa (checados no login do admin/gestor — mesmo padrão já usado no
+// NPS do Sistema, sem precisar de nenhum agendamento automático novo).
+// Por destinatário: cada admin/gestor recebe (e "risca") a própria cópia.
+model MilestoneNotified {
+  id            String   @id @default(uuid())
+  recipientId   String
+  subjectUserId String
+  type          String // 'FERIAS' | 'ANIVERSARIO_EMPRESA'
+  referenceDate DateTime
+  notifiedAt    DateTime @default(now())
+
+  @@unique([recipientId, subjectUserId, type, referenceDate])
 }

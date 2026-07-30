@@ -208,7 +208,11 @@ export class UsersService {
    * - Cadastro de COLABORADOR: ADMIN vê/edita qualquer um; GESTOR vê/edita
    *   só os da própria área.
    */
-  private async assertCanAccessTarget(
+  // Público de propósito (era private) — reaproveitado pelo módulo do
+  // Dossiê (v1.4.0) pra usar exatamente a mesma regra de "quem pode
+  // acessar quem" que já existe aqui, sem duplicar lógica. Nenhuma linha
+  // de comportamento mudou, só a visibilidade.
+  async assertCanAccessTarget(
     target: { id: string; role: UserRole; areaId: string | null },
     requester: AuthUser,
   ) {
