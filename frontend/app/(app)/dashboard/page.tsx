@@ -114,7 +114,7 @@ export default function DashboardPage() {
                       </div>
                       {c.deadline && (
                         <p className="text-xs text-p-neutral">
-                          Prazo: {new Date(c.deadline).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+                          Prazo: {new Date(c.deadline).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
                         </p>
                       )}
                       <p className="text-xs text-p-neutral">
@@ -268,7 +268,7 @@ export default function DashboardPage() {
                 <p className="text-xs text-p-neutral mt-1">
                   {data.pulseAtual.total - data.pulseAtual.pendentes} de {data.pulseAtual.total} avaliações concluídas
                   {data.pulseAtual.deadline &&
-                    ` • Prazo: ${new Date(data.pulseAtual.deadline).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`}
+                    ` • Prazo: ${new Date(data.pulseAtual.deadline).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`}
                 </p>
               </>
             ) : (

@@ -19,8 +19,14 @@ const DIAS_SEMANA = [
 function fmtMoney(v: number | null) {
   return v === null ? '—' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
+// Datas "puras" (sem hora — início na empresa, férias, formação,
+// certificação) precisam ser lidas em UTC, não no fuso de Brasília: o
+// valor já representa o dia certo em UTC, e aplicar o fuso de Brasília em
+// cima disso "recua" um dia (meia-noite UTC vira 21h do dia anterior em
+// Brasília). Diferente de datas com HORA de verdade (criado em, login
+// etc.), que continuam usando America/Sao_Paulo normalmente.
 function fmtDate(v: string | null) {
-  return v ? new Date(v).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
+  return v ? new Date(v).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '—';
 }
 
 export function DossieModal({ personId, onClose }: { personId: string | null; onClose: () => void }) {
