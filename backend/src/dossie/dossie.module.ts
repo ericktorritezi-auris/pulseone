@@ -182,7 +182,7 @@ class DossieService {
       ultimosFeedbacks = feedbacks.map((fb) => ({
         tipo: fb.type,
         autor: fb.type === PulseEvaluationType.AUTOAVALIACAO ? 'Autoavaliação' : fb.evaluator.fullName,
-        texto: fb.comment,
+        texto: fb.comment ?? '(sem comentário)',
       }));
     }
 

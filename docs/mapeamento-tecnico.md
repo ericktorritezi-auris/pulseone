@@ -901,6 +901,10 @@ Funcionalidade nova e substancial, mantendo a mesma disciplina de "zero impacto"
 
 **Complemento (mesma entrega):** seção **"Atribuições Especialistas"** adicionada ao Dossiê (tela e PDF) — mostra a descrição cadastrada na funcionalidade da v1.1.0, se a pessoa tiver algum registro **ativo** lá (mesmo critério da tela de consulta pública). Some por completo, sem espaço vazio nem erro, se não houver nenhuma.
 
+### 5.49 Correção — erro real de build no Dossiê (mesma classe de erro já vista antes)
+
+Erick reportou 404 em `/api/dossie/:id` após subir o ZIP — o build tinha falhado silenciosamente pro usuário final (o deploy anterior continuou rodando). Causa: `PulseFeedback.comment` é opcional no schema (`String?`), mas o código declarava `ultimosFeedbacks` com um tipo explícito exigindo `texto: string` (sempre presente) — erro que só aparece no build real (com o Prisma Client de verdade gerado), não no ambiente local de teste, que não tem esse client instalado. Corrigido com fallback (`fb.comment ?? '(sem comentário)'`). Revisão manual completa do restante do arquivo confirmou que essa era a única ocorrência desse padrão.
+
 ### 5.46 Correção — horários exibidos sem fuso horário explícito
 
 Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.
