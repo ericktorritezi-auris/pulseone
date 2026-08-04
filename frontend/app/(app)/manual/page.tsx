@@ -263,7 +263,9 @@ export default function ManualPage() {
                 </li>
                 <li>
                   <b>Formação e Certificações</b> — só "o que é" (ex: "Análise de Sistemas") e a data
-                  de conclusão, sem instituição nem período. Pode cadastrar quantas quiser.
+                  de conclusão, sem instituição nem período. Pode cadastrar quantas quiser. Se a data
+                  ainda não chegou, o sistema mostra "A concluir em" — depois que passar, muda
+                  sozinho pra "Concluído em", sem precisar editar nada.
                 </li>
                 <li>
                   <b>Atribuições Especialistas</b> — se a pessoa tiver algum registro ativo naquela

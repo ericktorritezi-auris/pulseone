@@ -25,8 +25,29 @@ function fmtMoney(v: number | null) {
 // cima disso "recua" um dia (meia-noite UTC vira 21h do dia anterior em
 // Brasília). Diferente de datas com HORA de verdade (criado em, login
 // etc.), que continuam usando America/Sao_Paulo normalmente.
+// Datas "puras" (sem hora — início na empresa, férias, formação,
+// certificação) precisam ser lidas em UTC, não no fuso de Brasília: o
+// valor já representa o dia certo em UTC, e aplicar o fuso de Brasília em
+// cima disso "recua" um dia (meia-noite UTC vira 21h do dia anterior em
+// Brasília). Diferente de datas com HORA de verdade (criado em, login
+// etc.), que continuam usando America/Sao_Paulo normalmente.
 function fmtDate(v: string | null) {
   return v ? new Date(v).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '—';
+}
+
+// "Concluído em" vs "A concluir em" (pedido do Erick) — compara o dia da
+// conclusão com o dia de hoje EM BRASÍLIA (mesmo cuidado de fuso do
+// fmtDate acima: os dois lados da comparação precisam estar no mesmo
+// referencial de dia, senão a virada perto da meia-noite fica errada).
+function statusFormacao(dataConclusao: string): 'Concluído em' | 'A concluir em' {
+  const conclusao = new Date(dataConclusao);
+  const conclusaoDia = Date.UTC(conclusao.getUTCFullYear(), conclusao.getUTCMonth(), conclusao.getUTCDate());
+
+  const hojeBrasil = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // 'AAAA-MM-DD'
+  const [ano, mes, dia] = hojeBrasil.split('-').map(Number);
+  const hojeDia = Date.UTC(ano, mes - 1, dia);
+
+  return conclusaoDia <= hojeDia ? 'Concluído em' : 'A concluir em';
 }
 
 export function DossieModal({ personId, onClose }: { personId: string | null; onClose: () => void }) {
@@ -509,7 +530,7 @@ export function DossieModal({ personId, onClose }: { personId: string | null; on
                       {dossie.formacaoECertificacoes.formacoes.map((f) => (
                         <div key={f.id} className="flex items-center justify-between text-sm bg-white rounded-lg px-3 py-1.5">
                           <span>
-                            {f.nome} — concluído em {fmtDate(f.dataConclusao)}
+                            {f.nome} — {statusFormacao(f.dataConclusao)} {fmtDate(f.dataConclusao)}
                           </span>
                           <button onClick={() => handleRemoveFormacao(f.id)} className="text-p-neutral hover:text-red-600">
                             <Trash2 size={13} />
@@ -544,7 +565,7 @@ export function DossieModal({ personId, onClose }: { personId: string | null; on
                       {dossie.formacaoECertificacoes.certificacoes.map((c) => (
                         <div key={c.id} className="flex items-center justify-between text-sm bg-white rounded-lg px-3 py-1.5">
                           <span>
-                            {c.nome} — concluído em {fmtDate(c.dataConclusao)}
+                            {c.nome} — {statusFormacao(c.dataConclusao)} {fmtDate(c.dataConclusao)}
                           </span>
                           <button onClick={() => handleRemoveCertificacao(c.id)} className="text-p-neutral hover:text-red-600">
                             <Trash2 size={13} />
