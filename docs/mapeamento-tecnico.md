@@ -933,6 +933,14 @@ Erick percebeu: campos de data sem hora (início na empresa, férias, formação
 
 **Correção:** essas datas puras agora exibem com `timeZone: 'UTC'` (lê o dia certo, sem conversão) — diferente de datas com **hora de verdade** (criado em, finalizado em, recebido em, comentário do NPS), que continuam corretamente em `America/Sao_Paulo`. No PDF do Dossiê, isso exigiu separar em duas funções (`fmtDateOnly` pra datas puras, `fmtDate` pra timestamps reais), já que a mesma função era reaproveitada pros dois casos — inclusive a data do feedback avulso recebido (timestamp real), que continua certa. Revisão completa de todo `toLocaleDateString` do frontend confirmou que cada uso ficou com o fuso certo pro tipo de dado.
 
+### 5.53 Formação/Certificação: "Concluído em" vs "A concluir em" (pedido do Erick)
+
+Um colaborador reportou: cadastrou uma formação com data de conclusão **futura** (ainda em andamento), mas o sistema mostrava "concluído em [data futura]" — confuso, já que ele ainda não tinha concluído nada.
+
+**Correção, puramente de exibição** (nenhuma mudança no dado salvo, no formulário de cadastro, nem em nenhum registro já existente): compara a data de conclusão com o dia de hoje — se já passou (ou é hoje), mostra "Concluído em"; se ainda não chegou, mostra "A concluir em". O texto muda sozinho conforme o calendário avança, sem precisar editar nada.
+
+Mesmo cuidado de fuso da seção 5.52: a comparação usa "hoje" no calendário de Brasília, extraído com `toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })` (formato `AAAA-MM-DD`, fácil de comparar) contra o dia da conclusão em UTC — evita qualquer erro de virada perto da meia-noite. Aplicado nos dois lugares que mostram essas datas: a tela (`DossieModal`) e o PDF (coluna "Situação", que antes só mostrava a data pura).
+
 ### 5.46 Correção — horários exibidos sem fuso horário explícito
 
 Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.

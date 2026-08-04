@@ -365,6 +365,17 @@ class DossieService {
     // recebido) continuam no fuso de Brasília normalmente.
     const fmtDate = (v: Date | string | null) =>
       v ? new Date(v).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
+    // "Concluído em" vs "A concluir em" (pedido do Erick) — mesmo cuidado
+    // de fuso do fmtDateOnly acima: os dois lados da comparação (data
+    // salva e "hoje") precisam estar no mesmo referencial de dia.
+    const statusFormacao = (dataConclusao: Date | string): string => {
+      const conclusao = new Date(dataConclusao);
+      const conclusaoDia = Date.UTC(conclusao.getUTCFullYear(), conclusao.getUTCMonth(), conclusao.getUTCDate());
+      const hojeBrasil = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+      const [ano, mes, dia] = hojeBrasil.split('-').map(Number);
+      const hojeDia = Date.UTC(ano, mes - 1, dia);
+      return conclusaoDia <= hojeDia ? 'Concluído em' : 'A concluir em';
+    };
     const regimeLabel: Record<string, string> = { CLT: 'CLT', COOPERADO: 'Cooperado', PJ: 'Pessoa Jurídica (PJ)' };
     const modalidadeLabel: Record<string, string> = { PRESENCIAL: 'Presencial', REMOTO: 'Remoto', HIBRIDO: 'Híbrido' };
     const diaLabel: Record<string, string> = {
@@ -491,20 +502,20 @@ class DossieService {
 
           <div class="secao">
             <h2>Formação e Certificações</h2>
-            <table><thead><tr><th>Formação</th><th>Conclusão</th></tr></thead><tbody>
+            <table><thead><tr><th>Formação</th><th>Situação</th></tr></thead><tbody>
               ${
                 d.formacaoECertificacoes.formacoes.length > 0
                   ? d.formacaoECertificacoes.formacoes
-                      .map((f) => `<tr><td>${f.nome}</td><td>${fmtDateOnly(f.dataConclusao)}</td></tr>`)
+                      .map((f) => `<tr><td>${f.nome}</td><td>${statusFormacao(f.dataConclusao)} ${fmtDateOnly(f.dataConclusao)}</td></tr>`)
                       .join('')
                   : `<tr><td colspan="2" style="color:#94A3B8;">Nenhuma formação cadastrada.</td></tr>`
               }
             </tbody></table>
-            <table style="margin-top:14px"><thead><tr><th>Certificação</th><th>Conclusão</th></tr></thead><tbody>
+            <table style="margin-top:14px"><thead><tr><th>Certificação</th><th>Situação</th></tr></thead><tbody>
               ${
                 d.formacaoECertificacoes.certificacoes.length > 0
                   ? d.formacaoECertificacoes.certificacoes
-                      .map((c) => `<tr><td>${c.nome}</td><td>${fmtDateOnly(c.dataConclusao)}</td></tr>`)
+                      .map((c) => `<tr><td>${c.nome}</td><td>${statusFormacao(c.dataConclusao)} ${fmtDateOnly(c.dataConclusao)}</td></tr>`)
                       .join('')
                   : `<tr><td colspan="2" style="color:#94A3B8;">Nenhuma certificação cadastrada.</td></tr>`
               }
