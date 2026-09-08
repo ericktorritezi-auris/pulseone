@@ -18,26 +18,12 @@ class PulseTeamService {
   constructor(private prisma: PrismaService) {}
 
   async getTeamProgress(cycleId: string, requester: AuthUser) {
-    await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id: cycleId } });
-    return this.computeProgress(cycleId, requester);
+    const cycle = await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id: cycleId } });
+    return this.computeProgress(cycleId, requester, cycle.areaId);
   }
 
   async getCurrentTeamProgress(requester: AuthUser) {
-    const activeCycle = await this.prisma.pulseCycle.findFirst({
-      where: { status: 'ABERTO' },
-      orderBy: { openedAt: 'desc' },
-    });
-
-    if (!activeCycle) return { cycle: null, team: [] };
-
-    return { cycle: { id: activeCycle.id, label: activeCycle.label }, team: await this.computeProgress(activeCycle.id, requester) };
-  }
-
-  private async computeProgress(cycleId: string, requester: AuthUser) {
-    // Gestor pode atuar em mais de uma área (seção 5.25) — o progresso do
-    // time precisa considerar TODAS as áreas que ele gerencia, não só a
-    // área principal dele.
-    const areaIds =
+    const managedAreaIds =
       requester.role === UserRole.GESTOR
         ? (
             await this.prisma.user.findUnique({
@@ -48,6 +34,53 @@ class PulseTeamService {
         : requester.areaId
           ? [requester.areaId]
           : [];
+
+    // CORREÇÃO (pedido urgente do Erick): antes, buscava só "o ciclo
+    // aberto mais recente do sistema todo" — com vários ciclos abertos ao
+    // mesmo tempo (um por área), isso escondia silenciosamente o time das
+    // outras áreas que o gestor também gerencia (apareciam como "0 de 0",
+    // como se não tivessem nada, quando na verdade o ciclo consultado
+    // simplesmente não era o delas). Agora considera TODOS os ciclos
+    // abertos relevantes pro gestor — Geral ou de qualquer área que ele
+    // gerencie — cada um com o time da PRÓPRIA área daquele ciclo.
+    const activeCycles = await this.prisma.pulseCycle.findMany({
+      where: {
+        status: 'ABERTO',
+        OR: [{ areaId: null }, { areaId: { in: managedAreaIds } }],
+      },
+      include: { area: { select: { name: true } } },
+      orderBy: { openedAt: 'desc' },
+    });
+
+    if (activeCycles.length === 0) return [];
+
+    return Promise.all(
+      activeCycles.map(async (cycle) => ({
+        cycle: { id: cycle.id, label: cycle.label, areaName: cycle.area?.name ?? 'Geral' },
+        team: await this.computeProgress(cycle.id, requester, cycle.areaId),
+      })),
+    );
+  }
+
+  private async computeProgress(cycleId: string, requester: AuthUser, cycleAreaId?: string | null) {
+    // Gestor pode atuar em mais de uma área (seção 5.25) — o progresso do
+    // time precisa considerar TODAS as áreas que ele gerencia, não só a
+    // área principal dele. Mas se o CICLO em si é de uma área específica
+    // (não Geral), o time mostrado tem que ser só dessa área — senão
+    // mistura gente que nem faz parte desse ciclo.
+    const managedAreaIds =
+      requester.role === UserRole.GESTOR
+        ? (
+            await this.prisma.user.findUnique({
+              where: { id: requester.id },
+              select: { managedAreas: { select: { id: true } } },
+            })
+          )?.managedAreas.map((a) => a.id) ?? []
+        : requester.areaId
+          ? [requester.areaId]
+          : [];
+
+    const areaIds = cycleAreaId ? managedAreaIds.filter((id) => id === cycleAreaId) : managedAreaIds;
 
     const members = await this.prisma.user.findMany({
       where: { areaId: { in: areaIds }, active: true, role: { not: UserRole.ADMIN } },

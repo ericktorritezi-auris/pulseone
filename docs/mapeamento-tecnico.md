@@ -941,6 +941,19 @@ Um colaborador reportou: cadastrou uma formação com data de conclusão **futur
 
 Mesmo cuidado de fuso da seção 5.52: a comparação usa "hoje" no calendário de Brasília, extraído com `toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })` (formato `AAAA-MM-DD`, fácil de comparar) contra o dia da conclusão em UTC — evita qualquer erro de virada perto da meia-noite. Aplicado nos dois lugares que mostram essas datas: a tela (`DossieModal`) e o PDF (coluna "Situação", que antes só mostrava a data pura).
 
+### 5.54 Correção URGENTE — gestor de múltiplas áreas via só 1 dos vários ciclos abertos
+
+Erick reportou (sistema em produção, ciclos rodando): sendo gestor de várias áreas com **6 ciclos Pulse abertos simultaneamente**, tanto a tela **Feedback Pulse** quanto **Avaliação do Time** só mostravam dados de **1** desses ciclos — as avaliações e o time das outras 5 áreas simplesmente sumiam da tela, sem erro nenhum aparente.
+
+**Causa raiz, confirmada por investigação antes de qualquer alteração:**
+- O **backend** de "minhas avaliações" (`/pulse-feedbacks/mine`) sempre esteve correto — já retornava tudo, de todos os ciclos, sem filtro nenhum de "ciclo atual". O bug era **só no frontend** (`/pulse`): um laço que **sobrescrevia** a variável "ciclo atual" a cada ciclo aberto encontrado, ao invés de juntar todos — sobrava só o último. Com 1 ciclo aberto no sistema todo (como sempre foi antes de existir ciclo por área), isso nunca dava problema; virou bug real só depois que passamos a permitir vários ciclos simultâneos.
+- Já **Avaliação do Time** (`/pulse-team/current`) tinha o bug no **backend**: buscava "o ciclo aberto mais recente do sistema todo" (`findFirst`) — pra um gestor de várias áreas, membros de áreas diferentes da desse ciclo específico apareciam como "0 de 0 avaliações" (parecendo sem nada atribuído, quando na real o ciclo consultado nem era o deles).
+
+**Correção, zero risco de dado** (as duas partes são puramente de busca/exibição — nenhuma escrita no banco, nenhuma avaliação já respondida foi tocada):
+- `/pulse`: passou a **coletar** todos os ciclos abertos (não mais sobrescrever), exibindo uma seção própria por ciclo, cada uma com seu progresso.
+- `/pulse-team/current`: passou a buscar **todos** os ciclos abertos relevantes ao gestor (Geral ou de qualquer área que ele gerencie) via `findMany`, calculando o time de **cada** ciclo escopado pela área **daquele ciclo específico** — não mais todas as áreas do gestor misturadas num só cálculo.
+- Varredura completa no backend por qualquer outro `status: 'ABERTO'` — confirmado que os únicos dois pontos restantes (dashboard do colaborador/gestor, e do admin) já estavam corretos de rodadas anteriores.
+
 ### 5.46 Correção — horários exibidos sem fuso horário explícito
 
 Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.
