@@ -32,9 +32,18 @@ export default function PulsePage() {
     );
   }
 
-  // Agrupa por ciclo primeiro. O ciclo ABERTO fica solto na tela (é o que
-  // importa agora); qualquer outro (ENCERRADO em diante) vira uma "pastinha"
-  // clicável — assim a tela não acumula um tabelão de ciclos antigos.
+  // Agrupa por ciclo primeiro. Cada ciclo ABERTO vira sua própria seção
+  // na tela (pode ter mais de um ao mesmo tempo — um por área, desde que
+  // ciclos por área foram implementados); qualquer outro (ENCERRADO em
+  // diante) vira uma "pastinha" clicável — assim a tela não acumula um
+  // tabelão de ciclos antigos.
+  //
+  // CORREÇÃO (pedido urgente do Erick): antes, essa lógica sobrescrevia
+  // uma única variável "ciclo atual" a cada ciclo aberto encontrado — com
+  // só 1 ciclo aberto no sistema todo (como era antes de existir ciclo
+  // por área), isso nunca dava problema. Com vários ciclos abertos ao
+  // mesmo tempo, só o último sobrevivia e os outros desapareciam da tela
+  // sem aviso nenhum — apesar do backend sempre ter retornado tudo certo.
   const byCycle = new Map<string, PendingPulseFeedback[]>();
   for (const item of items) {
     const group = byCycle.get(item.cycleId) ?? [];
@@ -42,45 +51,48 @@ export default function PulsePage() {
     byCycle.set(item.cycleId, group);
   }
 
-  let currentCycleItems: PendingPulseFeedback[] | null = null;
+  const openCycleGroups: { cycleId: string; label: string; items: PendingPulseFeedback[] }[] = [];
   const pastCycles: { cycleId: string; label: string; count: number }[] = [];
 
   for (const [cycleId, groupItems] of byCycle.entries()) {
     if (groupItems[0].cycle.status === 'ABERTO') {
-      currentCycleItems = groupItems;
+      openCycleGroups.push({ cycleId, label: groupItems[0].cycle.label, items: groupItems });
     } else {
       pastCycles.push({ cycleId, label: groupItems[0].cycle.label, count: groupItems.length });
     }
   }
 
-  const total = currentCycleItems?.length ?? 0;
-  const finishedCount = currentCycleItems?.filter((i) => i.status === 'FINALIZADO').length ?? 0;
-  const progress = total > 0 ? (finishedCount / total) * 100 : 0;
-
   return (
     <div className="max-w-2xl">
-      {currentCycleItems ? (
-        <>
-          <h1 className="text-xl font-semibold text-p-primary-dark mb-1">
-            {currentCycleItems[0].cycle.label}
-          </h1>
-          <p className="text-sm text-p-neutral mb-4">
-            Suas avaliações deste ciclo. Enquanto ele estiver aberto, você pode reabrir e editar
-            qualquer uma delas.
-          </p>
+      {openCycleGroups.length > 0 ? (
+        <div className="space-y-8 mb-8">
+          {openCycleGroups.map((group) => {
+            const total = group.items.length;
+            const finishedCount = group.items.filter((i) => i.status === 'FINALIZADO').length;
+            const progress = total > 0 ? (finishedCount / total) * 100 : 0;
+            return (
+              <div key={group.cycleId}>
+                <h1 className="text-xl font-semibold text-p-primary-dark mb-1">{group.label}</h1>
+                <p className="text-sm text-p-neutral mb-4">
+                  Suas avaliações deste ciclo. Enquanto ele estiver aberto, você pode reabrir e
+                  editar qualquer uma delas.
+                </p>
 
-          <div className="mb-8">
-            <PulseItemsByType items={currentCycleItems} />
-          </div>
+                <div className="mb-4">
+                  <PulseItemsByType items={group.items} />
+                </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <p className="text-xs text-p-neutral mb-2">Progresso geral</p>
-            <ProgressBar value={progress} />
-            <p className="text-xs text-p-neutral mt-1">
-              {finishedCount} de {total} avaliações concluídas
-            </p>
-          </div>
-        </>
+                <div className="bg-white rounded-xl border border-slate-200 p-4">
+                  <p className="text-xs text-p-neutral mb-2">Progresso geral</p>
+                  <ProgressBar value={progress} />
+                  <p className="text-xs text-p-neutral mt-1">
+                    {finishedCount} de {total} avaliações concluídas
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
         <div className="mb-8">
           <h1 className="text-xl font-semibold text-p-primary-dark mb-1">Feedback Pulse</h1>
@@ -89,7 +101,7 @@ export default function PulsePage() {
       )}
 
       {pastCycles.length > 0 && (
-        <div className={currentCycleItems ? 'mt-8' : ''}>
+        <div className={openCycleGroups.length > 0 ? 'mt-8' : ''}>
           <p className="text-xs font-semibold text-p-neutral uppercase mb-3">Ciclos anteriores</p>
           <div className="space-y-2">
             {pastCycles.map((c) => (
