@@ -970,6 +970,8 @@ Depois da correção 5.54, o Erick trouxe mais dois casos do mesmo padrão ("ass
 
 Ambas as correções são só de **busca/exibição** — nenhuma escrita no banco, nenhum dado de avaliação já respondido foi tocado, e o comportamento de Gestor/Colaborador ficou byte a byte igual ao que já estava em produção.
 
+**Hotfix de build (v1.6.1):** o primeiro deploy da 5.55 falhou no `nest build` da Railway com erro de tipo — `openedAt` do `PulseCycle` é opcional no schema (`DateTime?`), mas o `Map` que guarda "o ciclo mais recente de cada área" tinha sido anotado como `openedAt: Date` (não-opcional). Esse erro só aparece com o Prisma Client de verdade gerado (não é visível no ambiente de desenvolvimento sem o client gerado) — corrigido anotando o tipo corretamente como `Date | null` e tratando isso no comparador de ordenação. Nenhuma lógica de negócio mudou, só a tipagem.
+
 ### 5.46 Correção — horários exibidos sem fuso horário explícito
 
 Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.

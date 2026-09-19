@@ -177,24 +177,28 @@ class DashboardService {
     // vazio, feedback recebido delas some) mesmo ele sendo gestor delas.
     // Agora cada área geridas busca o SEU PRÓPRIO ciclo mais recente
     // (Geral ou dela mesma) — igual ao padrão já usado em pulse-team.
-    const latestCycleByArea = new Map<string, { id: string; label: string; openedAt: Date } | null>();
+    const latestCycleByArea = new Map<string, { id: string; label: string; openedAt: Date | null } | null>();
     for (const area of managedAreas) {
       const cycle = await this.prisma.pulseCycle.findFirst({
         where: {
           status: { in: [PulseCycleStatus.FINALIZADO, PulseCycleStatus.ARQUIVADO] },
           OR: [{ areaId: null }, { areaId: area.id }],
         },
+        select: { id: true, label: true, openedAt: true },
         orderBy: { openedAt: 'desc' },
       });
       latestCycleByArea.set(area.id, cycle);
     }
 
     // Label exibida no topo do painel ("Último ciclo: X") — só informativo,
-    // usa o ciclo mais recente entre todas as áreas geridas.
+    // usa o ciclo mais recente entre todas as áreas geridas. `openedAt` é
+    // opcional no schema (ciclo em RASCUNHO ainda não tem data) — mas aqui
+    // só entram ciclos já FINALIZADO/ARQUIVADO, que sempre têm openedAt
+    // preenchido; o `?? 0` é só uma salvaguarda pro comparador de sort.
     const cycleLabel =
       Array.from(latestCycleByArea.values())
-        .filter((c): c is { id: string; label: string; openedAt: Date } => !!c)
-        .sort((a, b) => b.openedAt.getTime() - a.openedAt.getTime())[0]?.label ?? null;
+        .filter((c): c is { id: string; label: string; openedAt: Date | null } => !!c)
+        .sort((a, b) => (b.openedAt?.getTime() ?? 0) - (a.openedAt?.getTime() ?? 0))[0]?.label ?? null;
 
     // Quebra por área (pedido do Erick): score/NPS médio de cada área
     // separadamente, não um número só misturando todo mundo.
