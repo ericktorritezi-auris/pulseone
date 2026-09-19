@@ -972,6 +972,16 @@ Ambas as correções são só de **busca/exibição** — nenhuma escrita no ban
 
 **Hotfix de build (v1.6.1):** o primeiro deploy da 5.55 falhou no `nest build` da Railway com erro de tipo — `openedAt` do `PulseCycle` é opcional no schema (`DateTime?`), mas o `Map` que guarda "o ciclo mais recente de cada área" tinha sido anotado como `openedAt: Date` (não-opcional). Esse erro só aparece com o Prisma Client de verdade gerado (não é visível no ambiente de desenvolvimento sem o client gerado) — corrigido anotando o tipo corretamente como `Date | null` e tratando isso no comparador de ordenação. Nenhuma lógica de negócio mudou, só a tipagem.
 
+### 5.56 Texto da avaliação recebida pelo gestor, por área (v1.6.2)
+
+Complementando a 5.55: o card "Como cada área te avaliou" (Dashboard do Gestor) mostrava só a **nota média** — o texto de cada avaliação que os liderados escreveram sobre o gestor (tipo `AVALIACAO_GESTOR`) não aparecia em lugar nenhum, mesmo o gestor sendo o alvo direto dessa avaliação. Pedido do Erick, com exemplo concreto: olhando o card de um colaborador em "Relatórios", ele via a autoavaliação e a avaliação que ele (gestor) deu, mas não a avaliação que aquele colaborador fez DELE (gestor) — porque essa avaliação não é "sobre" o colaborador, é sobre o gestor, então não pertence ao relatório do colaborador.
+
+**Decisão de onde mostrar** (conversada com o Erick antes de implementar): não misturar no card do colaborador — isso quebraria a lógica de "esse card é só sobre essa pessoa". Em vez disso, o texto entra no card que já é do próprio gestor, mesma estrutura por área que a 5.55 já usa:
+
+- `DashboardService.getManagerDashboard`: `avaliacaoRecebidaPorArea` agora inclui `feedbacks: [{ autor, texto }]` além do `scoreMedio` — um item por avaliação `AVALIACAO_GESTOR` `FINALIZADO` daquela área, no ciclo próprio dela. `autor` é anonimizado como "Liderado 1", "Liderado 2"... (mesmo padrão já usado em `PulseReportsService.buildReportDetail`) — nunca o nome real, mesmo pro próprio gestor.
+- Frontend (`/dashboard`): dentro de cada área do card "Como cada área te avaliou", a nota média continua no topo e agora vem, logo abaixo, a lista dos comentários daquela área.
+- Read-only — mesma leitura que já existia, só adicionando o campo `comment` (que já estava no banco) na resposta.
+
 ### 5.46 Correção — horários exibidos sem fuso horário explícito
 
 Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.

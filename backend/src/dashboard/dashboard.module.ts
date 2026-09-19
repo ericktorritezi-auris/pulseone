@@ -237,10 +237,21 @@ class DashboardService {
 
     // Painel informativo: como cada área avalia ESTE gestor (AVALIACAO_GESTOR
     // recebida, agrupada pela área de quem avaliou) — só informativo, nunca
-    // substitui o score oficial dele (que continua um número único). Agora
-    // percorre cada área gerida usando o ciclo PRÓPRIO dela (ver acima),
-    // em vez de um único ciclo global que escondia as outras áreas.
-    const avaliacaoRecebidaPorArea: { areaName: string; scoreMedio: number }[] = [];
+    // substitui o score oficial dele (que continua um número único). Cada
+    // área gerida usa o ciclo PRÓPRIO dela (ver acima), em vez de um único
+    // ciclo global que escondia as outras áreas.
+    //
+    // Pedido do Erick (seção 5.56): além da nota média, mostrar também o
+    // TEXTO de cada avaliação recebida — hoje esse comentário (o que o
+    // liderado escreveu sobre o gestor dele) não aparecia em lugar nenhum
+    // que o gestor pudesse ler, mesmo sendo ele o alvo direto da avaliação.
+    // Anonimizado como "Liderado N" dentro de cada área — mesmo padrão já
+    // usado no relatório individual (PulseReportsService.buildReportDetail).
+    const avaliacaoRecebidaPorArea: {
+      areaName: string;
+      scoreMedio: number;
+      feedbacks: { autor: string; texto: string | null }[];
+    }[] = [];
     for (const area of managedAreas) {
       const areaCycle = latestCycleByArea.get(area.id);
       if (!areaCycle) continue;
@@ -253,19 +264,24 @@ class DashboardService {
           status: PulseEvaluationStatus.FINALIZADO,
           evaluator: { areaId: area.id },
         },
+        orderBy: { createdAt: 'asc' },
       });
       if (recebidas.length === 0) continue;
 
       const scores: number[] = [];
+      const feedbacksDaArea: { autor: string; texto: string | null }[] = [];
+      let liderdadoCount = 0;
       for (const fb of recebidas) {
         const score = await this.behaviorScoreForFeedback(fb.id);
         if (score !== null) scores.push(score);
+        feedbacksDaArea.push({ autor: `Liderado ${++liderdadoCount}`, texto: fb.comment });
       }
       if (scores.length === 0) continue;
 
       avaliacaoRecebidaPorArea.push({
         areaName: area.name,
         scoreMedio: scores.reduce((a, v) => a + v, 0) / scores.length,
+        feedbacks: feedbacksDaArea,
       });
     }
 
