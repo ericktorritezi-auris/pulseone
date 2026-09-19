@@ -191,6 +191,26 @@ export default function RelatorioDetalhePage() {
         )}
       </div>
 
+      {/* Avaliações dadas por essa pessoa — colegas e gestor (pedido do
+          Erick: quadro completo do Pulse, não só o que ela recebeu) */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+        <h2 className="text-sm font-semibold text-p-primary-dark mb-4">Avaliações Dadas</h2>
+        {report.avaliacoesDadas.length === 0 ? (
+          <p className="text-sm text-p-neutral">Nenhuma avaliação dada, finalizada até o momento.</p>
+        ) : (
+          <div className="space-y-4">
+            {report.avaliacoesDadas.map((a, i) => (
+              <div key={i} className="border-l-2 border-p-primary/20 pl-3">
+                <p className="text-xs font-medium text-p-neutral">
+                  {a.rotulo} — {a.destinatario}
+                </p>
+                <p className="text-sm text-p-primary-dark mt-0.5">{a.texto}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Análise Preditiva do Colaborador — só quem consolida vê/gera */}
       {canConsolidate && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">

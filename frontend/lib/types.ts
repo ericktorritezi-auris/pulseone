@@ -187,6 +187,7 @@ export interface ReportDetail {
   score: PulseScoreSummary | null;
   aiAnalysis: AiAnalysis | null;
   comentarios: ReportComment[];
+  avaliacoesDadas: { tipo: string; rotulo: string; destinatario: string; texto: string | null }[];
 }
 
 export interface AdminDashboardData {
