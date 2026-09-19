@@ -215,7 +215,11 @@ export interface ManagerDashboardData {
     scoreMedio: number | null;
     npsMedio: number | null;
   }[];
-  avaliacaoRecebidaPorArea: { areaName: string; scoreMedio: number }[];
+  avaliacaoRecebidaPorArea: {
+    areaName: string;
+    scoreMedio: number;
+    feedbacks: { autor: string; texto: string | null }[];
+  }[];
 }
 
 export interface AuditLogEntry {

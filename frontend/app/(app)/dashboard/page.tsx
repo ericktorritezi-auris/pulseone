@@ -206,11 +206,23 @@ export default function DashboardPage() {
                 Informativo — não substitui seu score oficial do ciclo, que continua sendo um
                 número único.
               </p>
-              <div className="space-y-2">
+              <div className="space-y-5">
                 {managerData.avaliacaoRecebidaPorArea.map((a) => (
-                  <div key={a.areaName} className="flex justify-between text-sm">
-                    <span className="text-p-neutral">{a.areaName}</span>
-                    <span className="font-medium text-p-primary-dark">{a.scoreMedio.toFixed(1)}</span>
+                  <div key={a.areaName}>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="font-semibold text-p-primary-dark">{a.areaName}</span>
+                      <span className="font-medium text-p-primary-dark">{a.scoreMedio.toFixed(1)}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {a.feedbacks.map((fb, i) => (
+                        <div key={i} className="bg-slate-50 rounded-lg p-3">
+                          <p className="text-xs font-semibold text-p-neutral mb-1">{fb.autor}</p>
+                          <p className="text-sm text-p-primary-dark whitespace-pre-wrap">
+                            {fb.texto ?? '(sem comentário)'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
