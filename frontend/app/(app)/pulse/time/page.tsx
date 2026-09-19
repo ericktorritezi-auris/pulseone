@@ -5,6 +5,7 @@ import { api } from '../../../../lib/api';
 import { TeamMemberProgress } from '../../../../lib/types';
 import { AvatarInitials } from '../../../../components/shared/AvatarInitials';
 import { ProgressBar } from '../../../../components/shared/ProgressBar';
+import { useAuth } from '../../../../lib/auth-context';
 
 interface CycleTeamGroup {
   cycle: { id: string; label: string; areaName: string };

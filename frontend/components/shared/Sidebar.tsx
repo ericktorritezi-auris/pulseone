@@ -54,6 +54,7 @@ const ADMIN_MENU: MenuItem[] = [
   { href: '/cadastros/areas', label: 'Áreas', icon: Building2 },
   { href: '/cadastros/cargos', label: 'Cargos', icon: Briefcase },
   { href: '/ciclos-pulse', label: 'Ciclos Pulse', icon: RefreshCw },
+  { href: '/pulse/time', label: 'Avaliação Geral', icon: Activity },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/auditoria', label: 'Auditoria', icon: ScrollText },
   { href: '/nps', label: 'NPS', icon: Smile },
