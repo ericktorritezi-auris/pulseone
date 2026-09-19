@@ -23,8 +23,17 @@ class PulseTeamService {
   }
 
   async getCurrentTeamProgress(requester: AuthUser) {
-    const managedAreaIds =
-      requester.role === UserRole.GESTOR
+    // Admin não pertence a nenhuma área e não é avaliado — mas pediu
+    // explicitamente para conseguir acompanhar, nessa mesma tela, o
+    // progresso de TODOS os colaboradores em TODAS as áreas (visão de
+    // supervisão geral, diferente da visão do gestor, que é restrita às
+    // áreas que ele gerencia). Por isso o Admin não passa pelo filtro de
+    // área nenhum — nem na busca de ciclos, nem na busca de membros.
+    const isAdmin = requester.role === UserRole.ADMIN;
+
+    const managedAreaIds = isAdmin
+      ? []
+      : requester.role === UserRole.GESTOR
         ? (
             await this.prisma.user.findUnique({
               where: { id: requester.id },
@@ -46,7 +55,9 @@ class PulseTeamService {
     const activeCycles = await this.prisma.pulseCycle.findMany({
       where: {
         status: 'ABERTO',
-        OR: [{ areaId: null }, { areaId: { in: managedAreaIds } }],
+        // Admin vê TODOS os ciclos abertos, de qualquer área — não só os
+        // "Geral" ou das áreas que ele "gerencia" (ele não gerencia nenhuma).
+        ...(isAdmin ? {} : { OR: [{ areaId: null }, { areaId: { in: managedAreaIds } }] }),
       },
       include: { area: { select: { name: true } } },
       orderBy: { openedAt: 'desc' },
@@ -68,8 +79,15 @@ class PulseTeamService {
     // área principal dele. Mas se o CICLO em si é de uma área específica
     // (não Geral), o time mostrado tem que ser só dessa área — senão
     // mistura gente que nem faz parte desse ciclo.
-    const managedAreaIds =
-      requester.role === UserRole.GESTOR
+    //
+    // Admin (seção 5.55): não gerencia área nenhuma, então esse cálculo
+    // não se aplica a ele — ele enxerga todo mundo, sem filtro de área.
+    // `areaIds === null` é o sinal interno de "sem filtro" (todas as áreas).
+    const isAdmin = requester.role === UserRole.ADMIN;
+
+    const managedAreaIds = isAdmin
+      ? []
+      : requester.role === UserRole.GESTOR
         ? (
             await this.prisma.user.findUnique({
               where: { id: requester.id },
@@ -80,10 +98,20 @@ class PulseTeamService {
           ? [requester.areaId]
           : [];
 
-    const areaIds = cycleAreaId ? managedAreaIds.filter((id) => id === cycleAreaId) : managedAreaIds;
+    const areaIds: string[] | null = isAdmin
+      ? cycleAreaId
+        ? [cycleAreaId]
+        : null
+      : cycleAreaId
+        ? managedAreaIds.filter((id) => id === cycleAreaId)
+        : managedAreaIds;
 
     const members = await this.prisma.user.findMany({
-      where: { areaId: { in: areaIds }, active: true, role: { not: UserRole.ADMIN } },
+      where: {
+        ...(areaIds === null ? {} : { areaId: { in: areaIds } }),
+        active: true,
+        role: { not: UserRole.ADMIN },
+      },
       select: { id: true, fullName: true, role: true },
       orderBy: { fullName: 'asc' },
     });
@@ -112,7 +140,7 @@ class PulseTeamService {
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.GESTOR)
+@Roles(UserRole.GESTOR, UserRole.ADMIN)
 @Controller('pulse-team')
 class PulseTeamController {
   constructor(private pulseTeamService: PulseTeamService) {}

@@ -128,9 +128,10 @@ class DashboardService {
   }
 
   // Dashboard do GESTOR (escopo fechado com o Erick): NPS médio e score
-  // médio da equipe (liderados diretos), quantidade de membros + listagem.
-  // Como managerId exige mesma área (seção 5.7), um gestor nunca gerencia
-  // mais de uma área no modelo atual — por isso não existe "por área" aqui.
+  // médio da equipe (liderados diretos), quantidade de membros + listagem,
+  // quebrado por área (managedAreas — seção 5.25: um gestor pode gerenciar
+  // mais de uma área, e resolveManagerId já permite ser managerId direto de
+  // pessoas em qualquer área que ele gerencie, não só a própria).
   // Mesmo cálculo de score por avaliação usado no fechamento oficial do
   // ciclo (PulseScoreService.scoreForFeedback) — reaproveitado aqui só pro
   // painel INFORMATIVO "como cada área me avalia" (nunca altera o score
@@ -165,10 +166,35 @@ class DashboardService {
       orderBy: { fullName: 'asc' },
     });
 
-    const latestCycle = await this.prisma.pulseCycle.findFirst({
-      where: { status: { in: [PulseCycleStatus.FINALIZADO, PulseCycleStatus.ARQUIVADO] } },
-      orderBy: { openedAt: 'desc' },
-    });
+    // CORREÇÃO (pedido do Erick — seção 5.55): antes buscava só "o ciclo
+    // finalizado/arquivado mais recente do SISTEMA TODO" (findFirst global,
+    // sem filtro de área). Com ciclos agora escopados por área — podendo
+    // existir vários simultâneos e cada um encerrando em datas diferentes
+    // (seção 5.25/5.54) — esse único "mais recente" quase sempre acabava
+    // sendo o ciclo de UMA área só. Score e "como cada área te avaliou"
+    // eram calculados só em cima desse ciclo, então as outras áreas que
+    // esse gestor também gerencia ficavam de fora silenciosamente (score
+    // vazio, feedback recebido delas some) mesmo ele sendo gestor delas.
+    // Agora cada área geridas busca o SEU PRÓPRIO ciclo mais recente
+    // (Geral ou dela mesma) — igual ao padrão já usado em pulse-team.
+    const latestCycleByArea = new Map<string, { id: string; label: string; openedAt: Date } | null>();
+    for (const area of managedAreas) {
+      const cycle = await this.prisma.pulseCycle.findFirst({
+        where: {
+          status: { in: [PulseCycleStatus.FINALIZADO, PulseCycleStatus.ARQUIVADO] },
+          OR: [{ areaId: null }, { areaId: area.id }],
+        },
+        orderBy: { openedAt: 'desc' },
+      });
+      latestCycleByArea.set(area.id, cycle);
+    }
+
+    // Label exibida no topo do painel ("Último ciclo: X") — só informativo,
+    // usa o ciclo mais recente entre todas as áreas geridas.
+    const cycleLabel =
+      Array.from(latestCycleByArea.values())
+        .filter((c): c is { id: string; label: string; openedAt: Date } => !!c)
+        .sort((a, b) => b.openedAt.getTime() - a.openedAt.getTime())[0]?.label ?? null;
 
     // Quebra por área (pedido do Erick): score/NPS médio de cada área
     // separadamente, não um número só misturando todo mundo.
@@ -184,10 +210,11 @@ class DashboardService {
       const membrosDaArea = team.filter((t) => t.areaId === area.id);
       let scoreMedio: number | null = null;
       let npsMedio: number | null = null;
+      const areaCycle = latestCycleByArea.get(area.id);
 
-      if (latestCycle && membrosDaArea.length > 0) {
+      if (areaCycle && membrosDaArea.length > 0) {
         const scores = await this.prisma.pulseScore.findMany({
-          where: { cycleId: latestCycle.id, userId: { in: membrosDaArea.map((m) => m.id) } },
+          where: { cycleId: areaCycle.id, userId: { in: membrosDaArea.map((m) => m.id) } },
         });
         if (scores.length > 0) {
           scoreMedio = scores.reduce((a, s) => a + s.finalScore, 0) / scores.length;
@@ -206,33 +233,36 @@ class DashboardService {
 
     // Painel informativo: como cada área avalia ESTE gestor (AVALIACAO_GESTOR
     // recebida, agrupada pela área de quem avaliou) — só informativo, nunca
-    // substitui o score oficial dele (que continua um número único).
-    let avaliacaoRecebidaPorArea: { areaName: string; scoreMedio: number }[] = [];
-    if (latestCycle) {
+    // substitui o score oficial dele (que continua um número único). Agora
+    // percorre cada área gerida usando o ciclo PRÓPRIO dela (ver acima),
+    // em vez de um único ciclo global que escondia as outras áreas.
+    const avaliacaoRecebidaPorArea: { areaName: string; scoreMedio: number }[] = [];
+    for (const area of managedAreas) {
+      const areaCycle = latestCycleByArea.get(area.id);
+      if (!areaCycle) continue;
+
       const recebidas = await this.prisma.pulseFeedback.findMany({
         where: {
-          cycleId: latestCycle.id,
+          cycleId: areaCycle.id,
           targetId: requesterId,
           type: PulseEvaluationType.AVALIACAO_GESTOR,
           status: PulseEvaluationStatus.FINALIZADO,
+          evaluator: { areaId: area.id },
         },
-        include: { evaluator: { select: { area: { select: { name: true } } } } },
       });
+      if (recebidas.length === 0) continue;
 
-      const scoresPorArea = new Map<string, number[]>();
+      const scores: number[] = [];
       for (const fb of recebidas) {
-        const areaName = fb.evaluator.area?.name ?? 'Sem área';
         const score = await this.behaviorScoreForFeedback(fb.id);
-        if (score === null) continue;
-        const arr = scoresPorArea.get(areaName) ?? [];
-        arr.push(score);
-        scoresPorArea.set(areaName, arr);
+        if (score !== null) scores.push(score);
       }
+      if (scores.length === 0) continue;
 
-      avaliacaoRecebidaPorArea = Array.from(scoresPorArea.entries()).map(([areaName, scores]) => ({
-        areaName,
+      avaliacaoRecebidaPorArea.push({
+        areaName: area.name,
         scoreMedio: scores.reduce((a, v) => a + v, 0) / scores.length,
-      }));
+      });
     }
 
     return {
@@ -243,7 +273,7 @@ class DashboardService {
         positionName: t.position?.name ?? '—',
         areaName: t.area?.name ?? '—',
       })),
-      cycleLabel: latestCycle?.label ?? null,
+      cycleLabel,
       porArea,
       avaliacaoRecebidaPorArea,
     };
