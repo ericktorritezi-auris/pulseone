@@ -13,6 +13,8 @@ interface CycleTeamGroup {
 }
 
 export default function AvaliacaoDoTimePage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
   const [groups, setGroups] = useState<CycleTeamGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -23,12 +25,14 @@ export default function AvaliacaoDoTimePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const title = isAdmin ? 'Avaliação Geral' : 'Avaliação do Time';
+
   if (loading) return <p className="text-sm text-p-neutral">Carregando...</p>;
 
   if (groups.length === 0) {
     return (
       <div>
-        <h1 className="text-xl font-semibold text-p-primary-dark mb-1">Avaliação do Time</h1>
+        <h1 className="text-xl font-semibold text-p-primary-dark mb-1">{title}</h1>
         <p className="text-sm text-p-neutral">Nenhum ciclo Pulse aberto no momento.</p>
       </div>
     );
@@ -36,10 +40,11 @@ export default function AvaliacaoDoTimePage() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-xl font-semibold text-p-primary-dark mb-1">Avaliação do Time</h1>
+      <h1 className="text-xl font-semibold text-p-primary-dark mb-1">{title}</h1>
       <p className="text-sm text-p-neutral mb-6">
-        Acompanhamento individual de conclusão, ciclo por ciclo. Use isso pra cobrar quem estiver
-        atrasado; você não vê o conteúdo das respostas de ninguém aqui.
+        {isAdmin
+          ? 'Acompanhamento individual de conclusão, de todos os colaboradores, em qualquer área — visão geral de supervisão. Você não vê o conteúdo das respostas de ninguém aqui.'
+          : 'Acompanhamento individual de conclusão, ciclo por ciclo. Use isso pra cobrar quem estiver atrasado; você não vê o conteúdo das respostas de ninguém aqui.'}
       </p>
 
       <div className="space-y-8">
