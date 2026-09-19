@@ -251,6 +251,38 @@ export class PulseReportsService {
       return { tipo: fb.type, autor, texto: fb.comment };
     });
 
+    // Avaliações DADAS pelo dono do relatório (pedido do Erick — seção 5.57):
+    // além do que ele recebeu (acima), o quadro completo do Pulse dessa
+    // pessoa inclui o que ELA avaliou — colegas e o próprio gestor.
+    // Autoavaliação fica de fora daqui (já aparece em `comentarios`, senão
+    // apareceria duplicada). Sem trava adicional de visibilidade: quem já
+    // pode ver este relatório (gestor direto ou admin — ver
+    // `assertCanAccessReport`) já tem acesso liberado a este mesmo nível de
+    // detalhe; o próprio dono, vendo seu relatório, também vê o que ele
+    // mesmo escreveu (não é informação nova pra ele).
+    const dadas = await this.prisma.pulseFeedback.findMany({
+      where: {
+        cycleId: report.cycleId,
+        evaluatorId: report.ownerId,
+        type: { not: PulseEvaluationType.AUTOAVALIACAO },
+        status: PulseEvaluationStatus.FINALIZADO,
+      },
+      include: { target: { select: { fullName: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const avaliacoesDadas = dadas.map((fb) => ({
+      tipo: fb.type,
+      rotulo:
+        fb.type === PulseEvaluationType.AVALIACAO_GESTOR
+          ? 'Avaliação para o gestor'
+          : fb.type === PulseEvaluationType.AVALIACAO_EQUIPE
+            ? 'Avaliação para liderado'
+            : 'Avaliação para colega',
+      destinatario: fb.target.fullName,
+      texto: fb.comment,
+    }));
+
     return {
       id: report.id,
       status: report.status,
@@ -270,6 +302,7 @@ export class PulseReportsService {
       score,
       aiAnalysis: report.aiAnalysis,
       comentarios,
+      avaliacoesDadas,
     };
   }
 

@@ -982,6 +982,16 @@ Complementando a 5.55: o card "Como cada área te avaliou" (Dashboard do Gestor)
 - Frontend (`/dashboard`): dentro de cada área do card "Como cada área te avaliou", a nota média continua no topo e agora vem, logo abaixo, a lista dos comentários daquela área.
 - Read-only — mesma leitura que já existia, só adicionando o campo `comment` (que já estava no banco) na resposta.
 
+### 5.57 "Avaliações Dadas" no relatório individual — quadro completo do Pulse por pessoa (v1.6.3)
+
+Pedido do Erick, com exemplo concreto na tela "Relatórios" (lista dos liderados diretos, por ciclo — ainda ABERTO, sem nenhuma trava de consolidação pro gestor, já que ele precisa desse acesso pra poder consolidar): abrindo o relatório individual de um colaborador, ele via só "Feedbacks Recebidos" (autoavaliação + avaliação que o gestor deu) — mas não conseguia ver **o que aquele colaborador avaliou**: a nota/comentário que ele deu pra cada colega da área, e a avaliação que ele fez do próprio gestor. Pedido: "todos os pontos do Pulse" daquela pessoa, numa tela só.
+
+**Implementação:** `PulseReportsService.buildReportDetail` ganhou uma segunda busca — `avaliacoesDadas` — com todo `PulseFeedback` `FINALIZADO` onde essa pessoa é a **evaluatorId** (não mais só onde ela é `targetId`, que é o que `comentarios` já cobria). Autoavaliação fica de fora dessa segunda lista (já aparece em `comentarios`, senão duplicaria). Cada item mostra o tipo em português ("Avaliação para colega" / "Avaliação para o gestor" / "Avaliação para liderado") e o nome real de quem recebeu.
+
+**Sem trava adicional de visibilidade, de propósito:** quem já pode abrir esse relatório (gestor direto do dono, ou admin — `assertCanAccessReport`, sem exigir ciclo fechado nem consolidação de área) já tem acesso liberado a esse mesmo nível de detalhe. Isso é FEITO DE PROPÓSITO, diferente do card "Como cada área te avaliou" da 5.55/5.56 (que só libera após o ciclo fechar) — aqui a regra de visibilidade já era outra desde o começo (gestor vê os liderados diretos em qualquer status, pra poder consolidar), então a mudança só adiciona mais um tipo de dado dentro da mesma regra que já existia, não abre uma exceção nova.
+
+Frontend: nova seção "Avaliações Dadas" na tela de detalhe do relatório (`/relatorios/[id]`), entre "Feedbacks Recebidos" e a Análise Preditiva.
+
 ### 5.46 Correção — horários exibidos sem fuso horário explícito
 
 Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.
