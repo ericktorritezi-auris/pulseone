@@ -992,6 +992,16 @@ Pedido do Erick, com exemplo concreto na tela "Relatórios" (lista dos liderados
 
 Frontend: nova seção "Avaliações Dadas" na tela de detalhe do relatório (`/relatorios/[id]`), entre "Feedbacks Recebidos" e a Análise Preditiva.
 
+### 5.58 CORREÇÃO URGENTE — nome do colega exposto no PDF do relatório (v1.6.4)
+
+Reportado pelo Erick com sistema em produção e ciclos já sendo fechados: o PDF gerado pelo botão "Baixar PDF" (o mesmo que o gestor manda pro colaborador) estava mostrando o **nome real do colega** em cada "Avaliação de Colegas" — quebrando a regra de anonimato que existe desde o início do produto (PRD seção 19: colega só deve aparecer como "Colega 1/2/3" pra quem recebeu a avaliação).
+
+**Causa raiz:** a rota `GET /pulse-reports/:id/pdf` reaproveitava `findOne()`, cujo anonimato depende de **quem está pedindo** (`viewingAsOwner = requester.id === report.ownerId`) — correto pra tela de detalhe (o gestor PRECISA ver nome real ali, pra poder consolidar). Mas quem clica em "Baixar PDF" é o **gestor**, não o dono do relatório — então `viewingAsOwner` saía `false`, e o PDF (que é sempre o documento que o colaborador vai ler) saía com nome real, mesmo tendo sido pensado desde o início pra nunca expor isso.
+
+**Correção:** nova função `PulseReportsService.getForPdf()` — mesma checagem de permissão de sempre (`assertCanAccessReport`, sem exigir ciclo fechado, exatamente como já era), mas monta o conteúdo **sempre** com `viewingAsOwner: true`, porque o PDF é sempre pro dono ler, não importa quem clicou em gerar. A tela de detalhe (`findOne`) continua sem mudança nenhuma — o gestor consolidando ainda vê nome real de todo mundo ali dentro, só o PDF que passou a nunca expor colega.
+
+**Importante sobre o que já foi enviado:** essa correção vale só a partir de agora — PDFs já baixados/enviados **antes** do deploy não são alterados retroativamente (o Erick confirmou que isso não é necessário). A partir do deploy, todo PDF novo (gerado pelo botão, ou pelo arquivamento automático de ciclo, que já estava correto) sai sem nome de colega.
+
 ### 5.46 Correção — horários exibidos sem fuso horário explícito
 
 Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.

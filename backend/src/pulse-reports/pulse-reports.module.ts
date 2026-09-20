@@ -198,6 +198,40 @@ export class PulseReportsService {
     return this.buildReportDetail(report, true);
   }
 
+  /**
+   * CORREÇÃO URGENTE (pedido do Erick — seção 5.58): usado pela rota
+   * "Baixar PDF" (`GET /pulse-reports/:id/pdf`), que o GESTOR aciona pra
+   * gerar o PDF que vai ser enviado ao colaborador. Antes, essa rota
+   * reaproveitava `findOne()` — que calcula o anonimato baseado em QUEM
+   * está pedindo (`viewingAsOwner = requester.id === report.ownerId`).
+   * Como quem clica em "Baixar PDF" é o GESTOR (não o dono), isso resultava
+   * em `viewingAsOwner = false`, e o PDF saía com o NOME REAL de cada
+   * colega avaliador — exatamente o documento que vai pro colaborador ler.
+   *
+   * O PDF é sempre destinado ao DONO do relatório, não importa quem o
+   * gerou — então aqui a checagem de permissão continua a mesma de sempre
+   * (`assertCanAccessReport`, sem exigir ciclo fechado — o gestor já podia
+   * baixar o PDF de um relatório finalizado de qualquer status), mas a
+   * montagem do conteúdo sempre usa `viewingAsOwner: true`, igual ao
+   * e-mail de arquivamento automático acima. O gestor continua vendo tudo
+   * com nome real DENTRO do sistema (tela de detalhe, via `findOne`) —
+   * isso não muda; só o PDF gerado pra envio é que nunca expõe nome de
+   * colega, nem quando é o gestor quem clicou em gerar.
+   */
+  async getForPdf(id: string, requester: AuthUser) {
+    const report = await this.prisma.pulseReport.findUnique({
+      where: { id },
+      include: {
+        owner: { select: { id: true, fullName: true, managerId: true, areaId: true, area: true, position: true } },
+        cycle: { select: { label: true, status: true } },
+        aiAnalysis: true,
+      },
+    });
+    if (!report) throw new NotFoundException('Relatório não encontrado.');
+    await this.assertCanAccessReport(report, requester);
+    return this.buildReportDetail(report, true);
+  }
+
   private async buildReportDetail(
     report: {
       id: string;
@@ -469,12 +503,15 @@ class PulseReportsController {
     return this.pulseReportsService.findOne(id, req.user);
   }
 
-  // Reaproveita findOne() por completo — mesma checagem de permissão e
-  // mesma regra de anonimato já aplicadas, só troca a saída de JSON pra PDF.
+  // CORREÇÃO URGENTE (seção 5.58): usava findOne() aqui — mesma checagem de
+  // permissão, mas o anonimato de findOne() depende de QUEM pediu (o
+  // gestor, que vê nome real na tela). O PDF é sempre pro DONO ler, então
+  // usa getForPdf(), que aplica o anonimato de colega/liderado sempre,
+  // não importa quem clicou em "Baixar PDF".
   @Audit(AuditAction.GERACAO_PDF)
   @Get(':id/pdf')
   async getPdf(@Param('id') id: string, @Req() req: { user: AuthUser }, @Res() res: Response) {
-    const report = await this.pulseReportsService.findOne(id, req.user);
+    const report = await this.pulseReportsService.getForPdf(id, req.user);
     const html = this.pdfService.buildHtml(report as any);
     const buffer = await this.pdfService.generatePdf(html);
 
