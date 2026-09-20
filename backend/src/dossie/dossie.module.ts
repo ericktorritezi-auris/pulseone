@@ -200,22 +200,38 @@ class DossieService {
 
   // Monta o dossiê completo — dados cadastrais + confidenciais + resumo
   // do Pulse. Nada é gerado/calculado por IA: tudo vem direto do banco.
+  // `viewingAsOwner: false` — quem pede é gestor/admin vendo o dossiê de
+  // OUTRA pessoa (uso interno de gestão/RH), então os avaliadores do
+  // Pulse aparecem com nome real (precisam pra consolidar de verdade,
+  // mesma regra do relatório individual — ver `buildReportDetail` em
+  // `pulse-reports.module.ts`).
   async getDossie(id: string, requester: AuthUser) {
     await this.assertAccessAndGetTarget(id, requester);
-    return this.assembleDossie(id);
+    return this.assembleDossie(id, false);
   }
 
   // Visão de si mesmo (v1.5.0, pedido do Erick) — NUNCA aceita um id de
   // outra pessoa, sempre usa o próprio id de quem está logado. Por isso
   // não precisa (nem deve) passar pela checagem de acesso — ver o próprio
   // dossiê é sempre permitido, pra qualquer perfil, sem exceção.
+  //
+  // CORREÇÃO (pedido do Erick, v1.8.4): `viewingAsOwner: true` — é a
+  // PRÓPRIA pessoa vendo seus dados ("Meu Perfil" → "Dados Completos"),
+  // então os feedbacks do Pulse precisam seguir a MESMA regra de
+  // anonimato do PRD (seção 19) já aplicada no relatório individual:
+  // colega e liderado aparecem anonimizados, só o gestor direto com nome
+  // real. Antes, `assembleDossie` não recebia esse contexto nenhuma vez e
+  // sempre montava com nome real — vazando pro próprio colaborador quem
+  // deu cada feedback de colega no ciclo Pulse, quebrando o anonimato que
+  // o resto do sistema garante.
   async getMyDossie(requesterId: string) {
-    return this.assembleDossie(requesterId);
+    return this.assembleDossie(requesterId, true);
   }
 
   // Montagem do dossiê em si — sem nenhuma checagem de acesso aqui de
-  // propósito; quem chama (getDossie ou getMyDossie) já decidiu se pode.
-  private async assembleDossie(id: string) {
+  // propósito; quem chama (getDossie ou getMyDossie) já decidiu se pode e
+  // já decidiu o `viewingAsOwner` correto pro caso.
+  private async assembleDossie(id: string, viewingAsOwner: boolean) {
     const [
       fullUser,
       beneficios,
@@ -266,9 +282,14 @@ class DossieService {
       this.prisma.certificacao.findMany({ where: { userId: id }, orderBy: { dataConclusao: 'desc' } }),
     ]);
 
-    // Feedbacks do ÚLTIMO relatório finalizado — visão de gestão, NOME REAL
-    // de quem avaliou (diferente da visão anonimizada que o próprio
-    // colaborador tem de si mesmo — aqui é uso interno de RH/gestão).
+    // Feedbacks do ÚLTIMO relatório finalizado. REGRA DE ANONIMATO (PRD
+    // seção 19, mesma regra do relatório individual em
+    // `pulse-reports.module.ts`/`buildReportDetail`): quando é a PRÓPRIA
+    // pessoa vendo (`viewingAsOwner: true` — "Meu Dossiê"), colega e
+    // liderado aparecem anonimizados como "Colega N"/"Liderado N" — só o
+    // gestor direto (AVALIACAO_EQUIPE) aparece com nome real. Quando é
+    // gestor/admin vendo o dossiê de OUTRA pessoa (`viewingAsOwner:
+    // false`), todo mundo aparece com nome real (uso interno de gestão).
     let ultimosFeedbacks: { tipo: string; autor: string; texto: string }[] = [];
     if (latestReport) {
       const feedbacks = await this.prisma.pulseFeedback.findMany({
@@ -280,11 +301,24 @@ class DossieService {
         include: { evaluator: { select: { fullName: true } } },
         orderBy: { createdAt: 'asc' },
       });
-      ultimosFeedbacks = feedbacks.map((fb) => ({
-        tipo: fb.type,
-        autor: fb.type === PulseEvaluationType.AUTOAVALIACAO ? 'Autoavaliação' : fb.evaluator.fullName,
-        texto: fb.comment ?? '(sem comentário)',
-      }));
+      let colegaCount = 0;
+      let liderdadoCount = 0;
+      ultimosFeedbacks = feedbacks.map((fb) => {
+        let autor: string;
+        if (fb.type === PulseEvaluationType.AUTOAVALIACAO) {
+          autor = 'Autoavaliação';
+        } else if (fb.type === PulseEvaluationType.AVALIACAO_EQUIPE) {
+          // Gestor avaliando um liderado (o dono deste dossiê) — sempre nome real.
+          autor = fb.evaluator.fullName;
+        } else if (fb.type === PulseEvaluationType.AVALIACAO_GESTOR) {
+          // Um liderado avaliando o dono (que é gestor) — anonimizado pro próprio dono.
+          autor = viewingAsOwner ? `Liderado ${++liderdadoCount}` : fb.evaluator.fullName;
+        } else {
+          // COLEGA
+          autor = viewingAsOwner ? `Colega ${++colegaCount}` : fb.evaluator.fullName;
+        }
+        return { tipo: fb.type, autor, texto: fb.comment ?? '(sem comentário)' };
+      });
     }
 
     return {
