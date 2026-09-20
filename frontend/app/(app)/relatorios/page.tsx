@@ -10,6 +10,12 @@ import { AvatarInitials } from '../../../components/shared/AvatarInitials';
 import { StatusBadge } from '../../../components/shared/StatusBadge';
 import { ProgressBar } from '../../../components/shared/ProgressBar';
 
+interface OnePageCycleOption {
+  id: string;
+  label: string;
+  openedAt: string | null;
+}
+
 export default function RelatoriosPage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -18,18 +24,44 @@ export default function RelatoriosPage() {
   const [generatingOnePage, setGeneratingOnePage] = useState(false);
   const [onePageError, setOnePageError] = useState('');
 
-  // v1.8.0 — One Page Executiva (seção 5.60): resumo de uma página com
-  // todas as áreas geridas, pronto pra apresentar à Diretoria.
+  // v1.8.3 — pedido do Erick: antes o Relatório Executivo sempre pegava o
+  // último ciclo fechado por trás dos panos, sem avisar nem deixar
+  // escolher. Agora, ao clicar no botão, abre esse seletor com os ciclos
+  // fechados disponíveis (mais recente já vem marcado) — só gera o PDF
+  // depois de confirmar.
+  const [showCycleModal, setShowCycleModal] = useState(false);
+  const [cycleOptions, setCycleOptions] = useState<OnePageCycleOption[]>([]);
+  const [loadingCycles, setLoadingCycles] = useState(false);
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
+
+  async function openCycleModal() {
+    setOnePageError('');
+    setShowCycleModal(true);
+    setLoadingCycles(true);
+    try {
+      const cycles = await api.get<OnePageCycleOption[]>('/pulse-reports/one-page/cycles');
+      setCycleOptions(cycles);
+      setSelectedCycleId(cycles[0]?.id ?? null);
+    } catch (err) {
+      setOnePageError(err instanceof Error ? err.message : 'Erro ao buscar os ciclos disponíveis.');
+      setShowCycleModal(false);
+    } finally {
+      setLoadingCycles(false);
+    }
+  }
+
   async function handleGenerateOnePage() {
+    if (!selectedCycleId) return;
     setGeneratingOnePage(true);
     setOnePageError('');
     try {
-      const blob = await api.getBlob('/pulse-reports/one-page/pdf');
+      const blob = await api.getBlob(`/pulse-reports/one-page/pdf?cycleId=${selectedCycleId}`);
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      setShowCycleModal(false);
     } catch (err) {
-      setOnePageError(err instanceof Error ? err.message : 'Erro ao gerar a One Page Executiva.');
+      setOnePageError(err instanceof Error ? err.message : 'Erro ao gerar o Relatório Executivo.');
     } finally {
       setGeneratingOnePage(false);
     }
@@ -54,12 +86,11 @@ export default function RelatoriosPage() {
         <h1 className="text-xl font-semibold text-p-primary-dark">Relatórios</h1>
         {user?.role === 'GESTOR' && (
           <button
-            onClick={handleGenerateOnePage}
-            disabled={generatingOnePage}
+            onClick={openCycleModal}
             className="flex items-center gap-2 bg-p-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-60 shrink-0"
           >
             <FileBarChart size={16} />
-            {generatingOnePage ? 'Gerando...' : 'Gerar One Page Executiva'}
+            Gerar Relatório Executivo
           </button>
         )}
       </div>
@@ -101,6 +132,63 @@ export default function RelatoriosPage() {
               <ChevronRight size={16} className="text-p-neutral" />
             </button>
           ))}
+        </div>
+      )}
+
+      {showCycleModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-p-primary-dark/50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-7">
+            <h2 className="text-base font-bold text-p-primary-dark mb-1">Qual ciclo Pulse?</h2>
+            <p className="text-sm text-p-neutral mb-5">
+              O Relatório Executivo é gerado a partir de um ciclo fechado específico. Escolha qual.
+            </p>
+
+            {loadingCycles ? (
+              <p className="text-sm text-p-neutral mb-5">Carregando ciclos disponíveis...</p>
+            ) : cycleOptions.length === 0 ? (
+              <p className="text-sm text-p-neutral mb-5">
+                Nenhuma das suas áreas geridas tem um ciclo finalizado ou arquivado ainda.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2 mb-5 max-h-64 overflow-y-auto">
+                {cycleOptions.map((cycle, idx) => (
+                  <button
+                    key={cycle.id}
+                    type="button"
+                    onClick={() => setSelectedCycleId(cycle.id)}
+                    className={`text-left px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+                      selectedCycleId === cycle.id
+                        ? 'bg-p-primary/10 border-p-primary text-p-primary-dark font-medium'
+                        : 'border-slate-200 hover:border-p-primary text-p-primary-dark'
+                    }`}
+                  >
+                    {cycle.label}
+                    {idx === 0 && <span className="ml-2 text-[10px] font-semibold text-p-primary uppercase">Mais recente</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {onePageError && <p className="text-sm text-red-600 mb-3">{onePageError}</p>}
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCycleModal(false)}
+                className="flex-1 border border-slate-300 text-p-primary-dark py-2.5 rounded-lg text-sm font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateOnePage}
+                disabled={!selectedCycleId || generatingOnePage || loadingCycles}
+                className="flex-1 bg-p-primary text-white py-2.5 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+              >
+                {generatingOnePage ? 'Gerando...' : 'Gerar PDF'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
