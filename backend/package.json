@@ -1,6 +1,6 @@
 {
   "name": "pulseone-backend",
-  "version": "1.8.4",
+  "version": "1.8.5",
   "description": "PulseOne API — NestJS + Prisma + PostgreSQL",
   "scripts": {
     "build": "nest build",

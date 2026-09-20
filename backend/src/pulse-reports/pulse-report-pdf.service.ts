@@ -93,21 +93,58 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
+// v1.8.5 — corte seguro de texto livre (nunca no meio da palavra), usado só
+// pros "resumos" de texto corrido (fontes 'analise_textual' e 'parecer'),
+// que continuam sendo PARÁGRAFOS — nunca disfarçados de item curto tipo chip.
+function summarize(text: string | null | undefined, maxLen: number): string {
+  if (!text) return '';
+  if (text.length <= maxLen) return text;
+  const slice = text.slice(0, maxLen);
+  const lastSpace = slice.lastIndexOf(' ');
+  const safe = lastSpace > maxLen * 0.6 ? slice.slice(0, lastSpace) : slice;
+  return safe.trimEnd() + '…';
+}
+
+// v1.8.5 — pedido do Erick: o relatório ficava "vazio" pra quem não tinha
+// clicado em "Gerar Análise IA" antes do ciclo fechar (a maioria dos casos
+// na prática). Em vez de exigir os itens curtos, agora existe uma CASCATA
+// de conteúdo, na ordem de prioridade que ele definiu — cada colaborador
+// entra em UMA das 4 fontes abaixo, nunca mistura:
+//   1. 'items'           — Análise IA já com os itens curtos (melhor caso,
+//                           mostrado como chips, igual antes).
+//   2. 'analise_textual'  — Análise IA existe, mas é de antes dos itens
+//                           curtos (só texto livre: pontos fortes/melhoria/
+//                           tendências) — mostrado como 3 resumos em prosa.
+//   3. 'parecer'          — nunca gerou Análise IA nenhuma; usa o parecer
+//                           final que o gestor escreveu pra fechar o
+//                           relatório dessa pessoa.
+//   4. 'nenhum'           — nada registrado; mostra uma nota honesta em vez
+//                           de deixar o card em branco sem explicação.
+export type OnePageFonte = 'items' | 'analise_textual' | 'parecer' | 'nenhum';
+
 export interface OnePageColaborador {
   fullName: string;
   positionName: string | null;
   tenureLabel: string;
   score: number | null;
   scoreBand: string | null;
-  // v1.8.2 — pedido do Erick: itens curtos (palavra/expressão), não frase
-  // truncada. Vêm prontos de `PulseAiAnalysis.strengthsItems`/
-  // `improvementItems`, gerados pela IA junto da Análise Preditiva.
+  fonte: OnePageFonte;
+  // Preenchido só quando fonte === 'items'.
   pontosForte: string[];
   pontosMelhoria: string[];
+  // Preenchido só quando fonte === 'analise_textual'.
+  resumoFortes?: string | null;
+  resumoMelhoria?: string | null;
+  resumoTendencias?: string | null;
+  // Preenchido só quando fonte === 'parecer'.
+  resumoParecer?: string | null;
 }
 
 export interface OnePageArea {
   areaName: string;
+  // v1.8.5 — cada área pode vir de um ciclo diferente agora que o gestor
+  // pode combinar vários ciclos num só relatório (ex: um Pulse por área).
+  cicloLabel: string;
   scoreArea: number | null;
   scoreBandArea: string | null;
   colaboradores: OnePageColaborador[];
@@ -132,7 +169,11 @@ export interface OnePageRhAlerta {
 
 export interface OnePageData {
   gestor: { fullName: string; positionName: string | null };
-  cicloResumo: string;
+  // v1.8.5 — substitui o antigo `cicloResumo` (um texto só, um ciclo só).
+  // Agora pode ser mais de um ciclo combinado; cada entrada mostra o rótulo
+  // do ciclo e quais áreas ele efetivamente supriu neste relatório (depois
+  // de resolver sobreposição — ver `OnePageExecutivaService.build`).
+  ciclosUsados: { label: string; areas: string[] }[];
   geradoEm: string;
   scoreGeral: number | null;
   bandGeral: string | null;
@@ -304,7 +345,7 @@ export class PulseReportPdfService {
 
     const footer = `
       <div style="position:absolute;bottom:14px;left:22px;right:22px;display:flex;justify-content:space-between;font-size:7.5px;color:#8890a2;border-top:1px solid #dfe3ea;padding-top:5px;">
-        <span>PulseOne · Documento gerado automaticamente a partir dos dados do ciclo · Uso interno e confidencial</span>
+        <span>PulseOne · Documento gerado automaticamente a partir dos dados dos ciclos selecionados · Uso interno e confidencial</span>
         <span>Relatório Executivo de Gestão</span>
       </div>`;
 
@@ -315,6 +356,20 @@ export class PulseReportPdfService {
       ...(data.rhAlertas.length > 0 ? ['Pontos de Atenção para o RH'] : []),
     ];
 
+    // v1.8.5 — pedido do Erick: quando ele abre o Pulse separado por área,
+    // precisa marcar mais de um ciclo pra ter "o valor real de todos". Esta
+    // caixa deixa explícito, na própria capa, quais ciclos entraram no
+    // relatório e qual área cada um supriu.
+    const ciclosUsadosHtml = data.ciclosUsados
+      .map(
+        (c) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eef1f8;font-size:9.5px;">
+        <span style="font-weight:700;color:#14181f;">${escapeHtml(c.label)}</span>
+        <span style="color:#52586a;">${c.areas.map((a) => escapeHtml(a)).join(' · ')}</span>
+      </div>`,
+      )
+      .join('');
+
     const coverPage = `
     <div class="page">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1c3faa;padding-bottom:8px;margin-bottom:12px;">
@@ -323,7 +378,7 @@ export class PulseReportPdfService {
           <div style="font-size:11px;color:#52586a;margin-top:2px;">Relatório Executivo de Gestão — Consolidado por Área</div>
         </div>
         <div style="text-align:right;font-size:9.5px;color:#52586a;line-height:1.6;">
-          <div>${escapeHtml(data.cicloResumo)}</div>
+          <div>${data.ciclosUsados.length > 1 ? `${data.ciclosUsados.length} ciclos combinados` : '1 ciclo'}</div>
           <div>Gerado em: <b>${escapeHtml(data.geradoEm)}</b></div>
           <div style="display:inline-block;margin-top:3px;font-size:8px;font-weight:700;color:#8a1f1f;background:#fbe7e7;border:1px solid #f0bcbc;padding:2px 8px;border-radius:10px;">CONFIDENCIAL — USO INTERNO / DIRETORIA</div>
         </div>
@@ -335,7 +390,7 @@ export class PulseReportPdfService {
           <div style="font-size:10px;color:#52586a;">${data.gestor.positionName ? escapeHtml(data.gestor.positionName) + ' · ' : ''}${data.totalAreas} área(s) gerida(s)</div>
         </div>
         <div style="font-size:9px;color:#52586a;text-align:right;max-width:340px;">
-          Resumo executivo da atuação do gestor em todas as áreas sob sua responsabilidade neste ciclo.
+          Resumo executivo da atuação do gestor em todas as áreas sob sua responsabilidade, combinando os ciclos Pulse selecionados.
         </div>
       </div>
 
@@ -367,6 +422,11 @@ export class PulseReportPdfService {
         ${barsHtml || '<p style="font-size:10px;color:#8890a2;">Nenhuma área gerida tem um ciclo finalizado/arquivado ainda.</p>'}
       </div>
 
+      <div style="border:1px solid #dfe3ea;border-radius:9px;padding:10px 14px;margin-bottom:12px;">
+        <div style="font-size:9.5px;font-weight:700;color:#52586a;text-transform:uppercase;margin-bottom:6px;">Ciclos usados neste relatório</div>
+        ${ciclosUsadosHtml || '<p style="font-size:10px;color:#8890a2;">Nenhum ciclo selecionado.</p>'}
+      </div>
+
       <div style="border:1px solid #dfe3ea;border-radius:9px;padding:10px 14px;">
         <div style="font-size:9.5px;font-weight:700;color:#52586a;text-transform:uppercase;margin-bottom:6px;">Neste relatório</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;">
@@ -386,18 +446,13 @@ export class PulseReportPdfService {
         const peopleHtml = area.colaboradores
           .map((p) => {
             const color = semaforoColor(p.scoreBand);
-            const hasAnalise = p.pontosForte.length > 0 || p.pontosMelhoria.length > 0;
-            return `
-            <div style="break-inside:avoid;border:1px solid #e7eaf0;border-radius:8px;padding:9px 12px;margin-bottom:9px;">
-              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
-                <span style="font-size:12px;font-weight:700;">${escapeHtml(p.fullName)}</span>
-                <span style="font-size:9px;color:#8890a2;flex-shrink:0;">${escapeHtml(p.tenureLabel)} de casa</span>
-                <span style="font-size:12px;font-weight:800;color:${color};flex-shrink:0;">${p.score !== null ? Math.round(p.score) : '—'}</span>
-              </div>
-              ${p.positionName ? `<div style="font-size:9px;color:#8890a2;margin-top:1px;">${escapeHtml(p.positionName)}</div>` : ''}
-              ${
-                hasAnalise
-                  ? `
+
+            // v1.8.5 — cascata de conteúdo (ver comentário na definição de
+            // `OnePageFonte`): cada colaborador renderiza de UM jeito só,
+            // conforme a fonte de dados disponível pra ele.
+            let body: string;
+            if (p.fonte === 'items') {
+              body = `
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px;">
                 <div>
                   <div style="font-size:7.8px;font-weight:700;text-transform:uppercase;color:#1c6b1c;">Pontos fortes</div>
@@ -407,9 +462,33 @@ export class PulseReportPdfService {
                   <div style="font-size:7.8px;font-weight:700;text-transform:uppercase;color:#8a5c05;">A desenvolver</div>
                   ${chipList(p.pontosMelhoria, '#fef2df', '#8a5c05') || '<span style="font-size:8.5px;color:#8890a2;">—</span>'}
                 </div>
-              </div>`
-                  : `<div style="font-size:8.5px;color:#8890a2;margin-top:5px;">Sem análise IA gerada para este colaborador neste ciclo.</div>`
-              }
+              </div>`;
+            } else if (p.fonte === 'analise_textual') {
+              body = `
+              <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px;">
+                <div><span style="font-size:7.8px;font-weight:700;text-transform:uppercase;color:#1c6b1c;">Pontos fortes — </span><span style="font-size:9px;color:#33384a;">${escapeHtml(summarize(p.resumoFortes, 150))}</span></div>
+                <div><span style="font-size:7.8px;font-weight:700;text-transform:uppercase;color:#8a5c05;">A desenvolver — </span><span style="font-size:9px;color:#33384a;">${escapeHtml(summarize(p.resumoMelhoria, 150))}</span></div>
+                <div><span style="font-size:7.8px;font-weight:700;text-transform:uppercase;color:#2a78d6;">Tendência — </span><span style="font-size:9px;color:#33384a;">${escapeHtml(summarize(p.resumoTendencias, 150))}</span></div>
+              </div>`;
+            } else if (p.fonte === 'parecer') {
+              body = `
+              <div style="margin-top:6px;">
+                <span style="font-size:7.8px;font-weight:700;text-transform:uppercase;color:#52586a;">Parecer do gestor — </span>
+                <span style="font-size:9px;color:#33384a;">${escapeHtml(summarize(p.resumoParecer, 220))}</span>
+              </div>`;
+            } else {
+              body = `<div style="font-size:8.5px;color:#8890a2;margin-top:6px;">Sem parecer ou análise registrada para este colaborador neste ciclo.</div>`;
+            }
+
+            return `
+            <div style="break-inside:avoid;border:1px solid #e7eaf0;border-radius:8px;padding:9px 12px;margin-bottom:9px;">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+                <span style="font-size:12px;font-weight:700;">${escapeHtml(p.fullName)}</span>
+                <span style="font-size:9px;color:#8890a2;flex-shrink:0;">${escapeHtml(p.tenureLabel)} de casa</span>
+                <span style="font-size:12px;font-weight:800;color:${color};flex-shrink:0;">${p.score !== null ? Math.round(p.score) : '—'}</span>
+              </div>
+              ${p.positionName ? `<div style="font-size:9px;color:#8890a2;margin-top:1px;">${escapeHtml(p.positionName)}</div>` : ''}
+              ${body}
             </div>`;
           })
           .join('');
@@ -417,7 +496,7 @@ export class PulseReportPdfService {
         return `
         <div class="page">
           ${pageHeader(`Área — ${area.areaName}`, idx + 2)}
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
             <div>
               <div style="font-size:17px;font-weight:800;">${escapeHtml(area.areaName)}</div>
               <div style="font-size:10px;color:#52586a;">${area.colaboradores.length} colaborador(es) neste ciclo</div>
@@ -426,6 +505,7 @@ export class PulseReportPdfService {
               <span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${areaColor};"></span>${area.scoreArea !== null ? Math.round(area.scoreArea) : '—'}
             </div>
           </div>
+          <div style="font-size:8.5px;color:#8890a2;margin-bottom:10px;">Ciclo: ${escapeHtml(area.cicloLabel)}</div>
           <div>${peopleHtml || '<p style="font-size:10px;color:#8890a2;">Nenhum colaborador com score neste ciclo.</p>'}</div>
           ${footer}
         </div>`;
@@ -443,7 +523,7 @@ export class PulseReportPdfService {
       ${pageHeader('Pontos de Atenção para o RH', totalPages)}
       <div style="border:1px solid #f0c8c8;border-radius:9px;background:#fff8f5;padding:10px 14px;margin-bottom:12px;">
         <div style="font-size:13px;font-weight:800;color:#8a1f1f;">⚠ Pontos de Atenção para o RH</div>
-        <div style="font-size:9.5px;color:#7a4a30;margin-top:2px;">Cruzamento de score, tempo de casa e faixa salarial do mesmo cargo entre as áreas geridas.</div>
+        <div style="font-size:9.5px;color:#7a4a30;margin-top:2px;">Cruzamento de score, tempo de casa e faixa salarial do mesmo cargo entre as áreas geridas. Só aparece aqui quem realmente bate algum critério — ${data.totalColaboradores - data.rhAlertas.length} colaborador(es) sem nenhum ponto de atenção não aparecem nesta página.</div>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:10px;">
         ${data.rhAlertas
