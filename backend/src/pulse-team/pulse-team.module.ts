@@ -65,7 +65,7 @@ class PulseTeamService {
         // multi-área (relacionamento `areas`), não só o `areaId` legado.
         ...(isAdmin ? {} : areaGroupWhere(managedAreaIds)),
       },
-      include: { area: { select: { name: true } }, areas: { select: { name: true } } },
+      include: { area: { select: { name: true } }, areas: { select: { id: true, name: true } } },
       orderBy: { openedAt: 'desc' },
     });
 
