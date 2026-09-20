@@ -85,6 +85,7 @@ export interface PulseCycle {
   createdAt: string;
   areaId?: string | null;
   area?: { name: string } | null;
+  areas?: { name: string }[];
 }
 
 export interface PendingPulseFeedback {
@@ -274,6 +275,7 @@ export interface AnnouncementItem {
   createdBy?: { fullName: string };
   areaId?: string | null;
   area?: { name: string } | null;
+  areas?: { name: string }[];
 }
 
 // v1.4.0 — Dossiê Confidencial (pedido do Erick)

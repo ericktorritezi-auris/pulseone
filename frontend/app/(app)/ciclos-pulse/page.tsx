@@ -32,7 +32,7 @@ export default function CiclosPulsePage() {
   const [label, setLabel] = useState('');
   const [deadline, setDeadline] = useState('');
   const [scope, setScope] = useState<'geral' | 'area'>('geral');
-  const [areaId, setAreaId] = useState('');
+  const [areaIds, setAreaIds] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
@@ -66,16 +66,20 @@ export default function CiclosPulsePage() {
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     setError('');
+    if (scope === 'area' && areaIds.length === 0) {
+      setError('Selecione ao menos uma área.');
+      return;
+    }
     setSubmitting(true);
     try {
       await api.post('/pulse-cycles', {
         label,
-        ...(scope === 'area' && areaId ? { areaId } : {}),
+        ...(scope === 'area' && areaIds.length > 0 ? { areaIds } : {}),
       });
       setDrawerOpen(false);
       setLabel('');
       setScope('geral');
-      setAreaId('');
+      setAreaIds([]);
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar ciclo.');
@@ -161,7 +165,9 @@ export default function CiclosPulsePage() {
                 <td className="px-4 py-3 font-medium text-p-primary-dark">{cycle.label}</td>
                 <td className="px-4 py-3">
                   <span className="text-xs font-semibold uppercase tracking-wide bg-blue-50 text-p-primary px-2 py-0.5 rounded-full">
-                    {cycle.area?.name ?? 'Geral'}
+                    {cycle.areas && cycle.areas.length > 0
+                      ? cycle.areas.map((a) => a.name).join(' + ')
+                      : cycle.area?.name ?? 'Geral'}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -231,33 +237,38 @@ export default function CiclosPulsePage() {
                   checked={scope === 'geral'}
                   onChange={() => {
                     setScope('geral');
-                    setAreaId('');
+                    setAreaIds([]);
                   }}
                 />
                 Geral (todas as áreas)
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input type="radio" checked={scope === 'area'} onChange={() => setScope('area')} />
-                Só uma área
+                Áreas selecionadas
               </label>
             </div>
             {scope === 'area' && (
-              <select
-                required
-                value={areaId}
-                onChange={(e) => setAreaId(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-              >
-                <option value="">Selecione a área...</option>
+              <div className="border border-slate-200 rounded-lg p-3 space-y-1.5 max-h-48 overflow-y-auto">
                 {areas.map((a) => (
-                  <option key={a.id} value={a.id}>
+                  <label key={a.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={areaIds.includes(a.id)}
+                      onChange={(e) =>
+                        setAreaIds((prev) =>
+                          e.target.checked ? [...prev, a.id] : prev.filter((id) => id !== a.id),
+                        )
+                      }
+                    />
                     {a.name}
-                  </option>
+                  </label>
                 ))}
-              </select>
+              </div>
             )}
             <p className="text-xs text-p-neutral mt-1">
-              Dá pra ter ciclos de áreas diferentes abertos ao mesmo tempo, em momentos diferentes.
+              Marque uma ou mais áreas pra abrirem juntas, compartilhando o mesmo ciclo — útil pra que a
+              avaliação do gestor de quem gerencia várias áreas saia completa num só lugar. Dá também pra
+              ter ciclos de áreas diferentes abertos ao mesmo tempo, em momentos diferentes.
             </p>
           </div>
 

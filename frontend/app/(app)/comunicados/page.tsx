@@ -23,7 +23,7 @@ export default function ComunicadosPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [scope, setScope] = useState<'geral' | 'area'>('geral');
-  const [areaId, setAreaId] = useState('');
+  const [areaIds, setAreaIds] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -56,7 +56,7 @@ export default function ComunicadosPage() {
     setEditingId(null);
     setText('');
     setScope('geral');
-    setAreaId('');
+    setAreaIds([]);
     setError('');
     setDrawerOpen(true);
   }
@@ -71,6 +71,10 @@ export default function ComunicadosPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
+    if (!editingId && scope === 'area' && areaIds.length === 0) {
+      setError('Selecione ao menos uma área.');
+      return;
+    }
     setSubmitting(true);
     try {
       if (editingId) {
@@ -80,7 +84,7 @@ export default function ComunicadosPage() {
       } else {
         await api.post('/announcements', {
           text,
-          ...(scope === 'area' && areaId ? { areaId } : {}),
+          ...(scope === 'area' && areaIds.length > 0 ? { areaIds } : {}),
         });
       }
       setDrawerOpen(false);
@@ -141,7 +145,9 @@ export default function ComunicadosPage() {
               <div className="flex items-center gap-2 text-xs text-p-neutral flex-wrap">
                 <StatusBadge status={item.active ? 'ATIVO' : 'INATIVO'} />
                 <span className="text-[10px] font-semibold uppercase tracking-wide bg-blue-50 text-p-primary px-2 py-0.5 rounded-full">
-                  {item.area?.name ?? 'Geral'}
+                  {item.areas && item.areas.length > 0
+                    ? item.areas.map((a) => a.name).join(' + ')
+                    : item.area?.name ?? 'Geral'}
                 </span>
                 <span>
                   criado por {item.createdBy?.fullName ?? '—'} em{' '}
@@ -194,30 +200,33 @@ export default function ComunicadosPage() {
                     checked={scope === 'geral'}
                     onChange={() => {
                       setScope('geral');
-                      setAreaId('');
+                      setAreaIds([]);
                     }}
                   />
                   Geral (todo mundo)
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="radio" checked={scope === 'area'} onChange={() => setScope('area')} />
-                  Só uma área
+                  Áreas selecionadas
                 </label>
               </div>
               {scope === 'area' && (
-                <select
-                  required
-                  value={areaId}
-                  onChange={(e) => setAreaId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                >
-                  <option value="">Selecione a área...</option>
+                <div className="border border-slate-200 rounded-lg p-3 space-y-1.5 max-h-48 overflow-y-auto">
                   {eligibleAreas.map((a) => (
-                    <option key={a.id} value={a.id}>
+                    <label key={a.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={areaIds.includes(a.id)}
+                        onChange={(e) =>
+                          setAreaIds((prev) =>
+                            e.target.checked ? [...prev, a.id] : prev.filter((id) => id !== a.id),
+                          )
+                        }
+                      />
                       {a.name}
-                    </option>
+                    </label>
                   ))}
-                </select>
+                </div>
               )}
               {user?.role === 'GESTOR' && (
                 <p className="text-xs text-p-neutral mt-1">
