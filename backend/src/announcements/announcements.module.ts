@@ -20,7 +20,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ResendService } from '../auth/resend.service';
 import { EmailModule } from '../email/email.module';
 import { AuditAction, UserRole } from '@prisma/client';
-import { IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsOptional, IsString, MinLength } from 'class-validator';
+import { areaGroupWhere } from '../common/cycle-area.util';
 
 type AuthUser = { id: string; role: UserRole; areaId: string | null };
 
@@ -31,9 +32,18 @@ class AnnouncementDto {
 
   // Comunicado por área (pedido do Erick) — ausente/null = GERAL (todo
   // mundo vê). Admin pode escolher qualquer área; gestor só as que gerencia.
+  // Mantido por compatibilidade; ver `areaIds` abaixo.
   @IsOptional()
   @IsString()
   areaId?: string;
+
+  // v1.7.0 — Multi-área (pedido do Erick, seção 5.59): marcar VÁRIAS áreas
+  // pra publicar o mesmo comunicado pra todas de uma vez. Ausente/vazio =
+  // comportamento de sempre (Geral ou `areaId` único).
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  areaIds?: string[];
 }
 
 @Injectable()
@@ -47,18 +57,24 @@ class AnnouncementsService {
   // guardado pra consulta futura, não é apagado (pedido do Erick).
   findAll() {
     return this.prisma.announcement.findMany({
-      include: { createdBy: { select: { fullName: true } }, area: { select: { name: true } } },
+      include: {
+        createdBy: { select: { fullName: true } },
+        area: { select: { name: true } },
+        areas: { select: { name: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   // Faixa do Dashboard: todo mundo vê os GERAIS + os da PRÓPRIA área de
   // quem está olhando — nunca o comunicado de uma área diferente.
+  // v1.7.0 (seção 5.59): `areaGroupWhere` também casa comunicados
+  // multi-área que incluem esta área (relacionamento `areas`).
   findActive(requesterAreaId: string | null) {
     return this.prisma.announcement.findMany({
       where: {
         active: true,
-        OR: requesterAreaId ? [{ areaId: null }, { areaId: requesterAreaId }] : [{ areaId: null }],
+        ...(requesterAreaId ? areaGroupWhere([requesterAreaId]) : { areaId: null, areas: { none: {} } }),
       },
       select: { id: true, text: true },
       orderBy: { createdAt: 'desc' },
@@ -80,30 +96,41 @@ class AnnouncementsService {
   }
 
   async create(dto: AnnouncementDto, creator: AuthUser) {
-    // Gestor só pode escolher área que ele mesmo gerencia — validado no
+    // v1.7.0 — Multi-área (seção 5.59): 0 área = Geral (igual sempre); 1
+    // área grava também no `areaId` legado (compatibilidade); 2+ áreas usa
+    // exclusivamente o novo relacionamento `areas`.
+    const areaIds = (dto.areaIds ?? (dto.areaId ? [dto.areaId] : [])).filter(Boolean);
+
+    // Gestor só pode escolher área(s) que ele mesmo gerencia — validado no
     // backend, não só escondido no frontend.
-    if (dto.areaId && creator.role === UserRole.GESTOR) {
+    if (areaIds.length > 0 && creator.role === UserRole.GESTOR) {
       const eligible = await this.findEligibleAreas(creator);
-      if (!eligible.some((a) => a.id === dto.areaId)) {
+      const eligibleIds = new Set(eligible.map((a) => a.id));
+      if (areaIds.some((id) => !eligibleIds.has(id))) {
         throw new ForbiddenException('Você só pode criar comunicados pra áreas que gerencia.');
       }
     }
 
     const created = await this.prisma.announcement.create({
-      data: { text: dto.text, createdById: creator.id, areaId: dto.areaId ?? null },
+      data: {
+        text: dto.text,
+        createdById: creator.id,
+        areaId: areaIds.length === 1 ? areaIds[0] : (dto.areaId ?? null),
+        ...(areaIds.length > 0 ? { areas: { connect: areaIds.map((id) => ({ id })) } } : {}),
+      },
     });
 
     // E-mail só pra COLABORADOR — nunca admin, nunca gestor (regra
     // explícita do Erick: quem cria não precisa ser avisado do que criou).
-    // Se o comunicado é por área, só os colaboradores DAQUELA área recebem.
-    // Best-effort: uma falha de e-mail nunca impede o comunicado de ser
-    // publicado, já que ele já foi salvo com sucesso.
+    // Se o comunicado é por área(s), só os colaboradores DAQUELAS áreas
+    // recebem. Best-effort: uma falha de e-mail nunca impede o comunicado
+    // de ser publicado, já que ele já foi salvo com sucesso.
     try {
       const colaboradores = await this.prisma.user.findMany({
         where: {
           active: true,
           role: UserRole.COLABORADOR,
-          ...(dto.areaId ? { areaId: dto.areaId } : {}),
+          ...(areaIds.length > 0 ? { areaId: { in: areaIds } } : {}),
         },
         select: { email: true, fullName: true },
       });

@@ -4,6 +4,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { PulseEvaluationStatus, UserRole } from '@prisma/client';
+import { resolveGroupAreaIds, areaGroupWhere, areaGroupLabel } from '../common/cycle-area.util';
 
 type AuthUser = { id: string; role: UserRole; areaId: string | null };
 
@@ -18,8 +19,11 @@ class PulseTeamService {
   constructor(private prisma: PrismaService) {}
 
   async getTeamProgress(cycleId: string, requester: AuthUser) {
-    const cycle = await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id: cycleId } });
-    return this.computeProgress(cycleId, requester, cycle.areaId);
+    const cycle = await this.prisma.pulseCycle.findUniqueOrThrow({
+      where: { id: cycleId },
+      include: { areas: true },
+    });
+    return this.computeProgress(cycleId, requester, resolveGroupAreaIds(cycle));
   }
 
   async getCurrentTeamProgress(requester: AuthUser) {
@@ -57,9 +61,11 @@ class PulseTeamService {
         status: 'ABERTO',
         // Admin vê TODOS os ciclos abertos, de qualquer área — não só os
         // "Geral" ou das áreas que ele "gerencia" (ele não gerencia nenhuma).
-        ...(isAdmin ? {} : { OR: [{ areaId: null }, { areaId: { in: managedAreaIds } }] }),
+        // v1.7.0 (seção 5.59): `areaGroupWhere` também casa ciclos
+        // multi-área (relacionamento `areas`), não só o `areaId` legado.
+        ...(isAdmin ? {} : areaGroupWhere(managedAreaIds)),
       },
-      include: { area: { select: { name: true } } },
+      include: { area: { select: { name: true } }, areas: { select: { name: true } } },
       orderBy: { openedAt: 'desc' },
     });
 
@@ -67,13 +73,13 @@ class PulseTeamService {
 
     return Promise.all(
       activeCycles.map(async (cycle) => ({
-        cycle: { id: cycle.id, label: cycle.label, areaName: cycle.area?.name ?? 'Geral' },
-        team: await this.computeProgress(cycle.id, requester, cycle.areaId),
+        cycle: { id: cycle.id, label: cycle.label, areaName: areaGroupLabel(cycle) },
+        team: await this.computeProgress(cycle.id, requester, resolveGroupAreaIds(cycle)),
       })),
     );
   }
 
-  private async computeProgress(cycleId: string, requester: AuthUser, cycleAreaId?: string | null) {
+  private async computeProgress(cycleId: string, requester: AuthUser, cycleAreaIds: string[] | null) {
     // Gestor pode atuar em mais de uma área (seção 5.25) — o progresso do
     // time precisa considerar TODAS as áreas que ele gerencia, não só a
     // área principal dele. Mas se o CICLO em si é de uma área específica
@@ -98,12 +104,13 @@ class PulseTeamService {
           ? [requester.areaId]
           : [];
 
+    // v1.7.0 (seção 5.59): `cycleAreaIds` agora pode ter 2+ áreas (ciclo
+    // multi-área) — usa `.includes` em vez de igualdade estrita, senão um
+    // gestor que gerencia uma das áreas do grupo ficaria de fora.
     const areaIds: string[] | null = isAdmin
-      ? cycleAreaId
-        ? [cycleAreaId]
-        : null
-      : cycleAreaId
-        ? managedAreaIds.filter((id) => id === cycleAreaId)
+      ? cycleAreaIds
+      : cycleAreaIds
+        ? managedAreaIds.filter((id) => cycleAreaIds.includes(id))
         : managedAreaIds;
 
     const members = await this.prisma.user.findMany({

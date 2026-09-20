@@ -4,6 +4,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { PulseCycleStatus, PulseEvaluationStatus, PulseEvaluationType, PulseReportStatus, UserRole } from '@prisma/client';
+import { areaGroupWhere, areaGroupLabel } from '../common/cycle-area.util';
 
 type AuthUser = { id: string; role: UserRole; areaId: string | null };
 
@@ -51,7 +52,9 @@ class DashboardService {
             // filtro nesse campo", o que bateria com QUALQUER área).
             where: {
               status: 'ABERTO',
-              OR: areaId ? [{ areaId: null }, { areaId }] : [{ areaId: null }],
+              // v1.7.0 (seção 5.59): `areaGroupWhere` também casa ciclos
+              // multi-área (relacionamento `areas`), não só `areaId`.
+              ...(areaId ? areaGroupWhere([areaId]) : { areaId: null, areas: { none: {} } }),
             },
             orderBy: { openedAt: 'desc' },
           }),
@@ -182,7 +185,9 @@ class DashboardService {
       const cycle = await this.prisma.pulseCycle.findFirst({
         where: {
           status: { in: [PulseCycleStatus.FINALIZADO, PulseCycleStatus.ARQUIVADO] },
-          OR: [{ areaId: null }, { areaId: area.id }],
+          // v1.7.0 (seção 5.59): também casa ciclos multi-área que incluem
+          // esta área (relacionamento `areas`), não só `areaId`/Geral.
+          ...areaGroupWhere([area.id]),
         },
         select: { id: true, label: true, openedAt: true },
         orderBy: { openedAt: 'desc' },
@@ -314,7 +319,7 @@ class DashboardService {
       // "pulso vigente".
       this.prisma.pulseCycle.findMany({
         where: { status: 'ABERTO' },
-        include: { area: { select: { name: true } } },
+        include: { area: { select: { name: true } }, areas: { select: { name: true } } },
         orderBy: { openedAt: 'desc' },
       }),
     ]);
@@ -330,7 +335,7 @@ class DashboardService {
         return {
           id: cycle.id,
           label: cycle.label,
-          areaName: cycle.area?.name ?? 'Geral',
+          areaName: areaGroupLabel(cycle),
           deadline: cycle.deadline,
           participacaoPercentual: total > 0 ? Math.round((finalizadas / total) * 100) : 0,
           pendencias: total - finalizadas,

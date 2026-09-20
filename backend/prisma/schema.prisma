@@ -152,6 +152,16 @@ model Area {
   pulseCycles   PulseCycle[]
   announcements Announcement[]
   createdAt DateTime @default(now())
+
+  // v1.7.0 — Multi-área (pedido do Erick): permite abrir um ciclo Pulse ou
+  // publicar um comunicado marcando VÁRIAS áreas de uma vez (checkbox),
+  // pra que elas passem a compartilhar o mesmo cycleId/registro — em vez de
+  // "uma área só ou todas (Geral)". Aditivo: tabelas M:N novas, geradas
+  // automaticamente pelo Prisma; nenhum ciclo/comunicado existente é
+  // afetado (todos continuam com essa lista vazia e resolvem pelo areaId
+  // legado, ver `resolveGroupAreaIds` em common/cycle-area.util.ts).
+  pulseCyclesMulti   PulseCycle[]   @relation("PulseCycleAreas")
+  announcementsMulti Announcement[] @relation("AnnouncementAreas")
 }
 
 model Position {
@@ -228,6 +238,14 @@ model PulseCycle {
   // precisar de nenhuma migração de dado.
   areaId String?
   area   Area?   @relation(fields: [areaId], references: [id])
+
+  // v1.7.0 — Multi-área (pedido do Erick, seção 5.59): quando o ciclo é
+  // aberto marcando 2+ áreas juntas, elas ficam aqui e `areaId` acima
+  // permanece null. Resolve o bug de score fragmentado de gestor
+  // multi-área (Gestor 40% só somava liderados da MESMA cycleId) sem
+  // nenhuma mudança no motor de cálculo — as áreas passam a compartilhar
+  // o mesmo cycleId de verdade.
+  areas Area[] @relation("PulseCycleAreas")
 
   pulseFeedbacks PulseFeedback[]
   pulseScores    PulseScore[]
@@ -430,6 +448,10 @@ model Announcement {
   // PulseCycle.areaId: nenhum comunicado já publicado muda de comportamento.
   areaId String?
   area   Area?   @relation(fields: [areaId], references: [id])
+
+  // v1.7.0 — Multi-área (pedido do Erick, seção 5.59): mesmo mecanismo do
+  // PulseCycle.areas acima — comunicado publicado marcando 2+ áreas juntas.
+  areas Area[] @relation("AnnouncementAreas")
 }
 
 // ==========================

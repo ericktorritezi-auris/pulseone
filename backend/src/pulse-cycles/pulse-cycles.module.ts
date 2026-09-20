@@ -29,7 +29,8 @@ import {
   UserRole,
   AuditAction,
 } from '@prisma/client';
-import { IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsOptional, IsString, MinLength } from 'class-validator';
+import { resolveGroupAreaIds } from '../common/cycle-area.util';
 
 class CreateCycleDto {
   @IsString()
@@ -37,9 +38,19 @@ class CreateCycleDto {
   label: string; // ex: "Pulse Junho/2025"
 
   // Ciclo por área (pedido do Erick) — ausente/null = GERAL (todo mundo).
+  // Mantido por compatibilidade; quando `areaIds` tem 1 item só, os dois
+  // campos acabam representando a mesma coisa.
   @IsOptional()
   @IsString()
   areaId?: string;
+
+  // v1.7.0 — Multi-área (pedido do Erick, seção 5.59): marcar VÁRIAS áreas
+  // pra abrir juntas como um único ciclo compartilhado (mesmo cycleId).
+  // Ausente/vazio = comportamento de sempre (Geral ou `areaId` único).
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  areaIds?: string[];
 }
 
 class OpenCycleDto {
@@ -75,10 +86,22 @@ class PulseAssignmentService {
     // Ciclo por área (pedido do Erick): se o ciclo tem uma área marcada,
     // gera avaliação SÓ pra ela. Se não tem (GERAL), continua processando
     // todas as áreas — exatamente o comportamento de sempre.
-    const cycle = await this.prisma.pulseCycle.findUniqueOrThrow({ where: { id: cycleId } });
+    const cycle = await this.prisma.pulseCycle.findUniqueOrThrow({
+      where: { id: cycleId },
+      include: { areas: true },
+    });
+
+    // v1.7.0 — Multi-área (seção 5.59): `selectedAreaIds` é null pra ciclo
+    // GERAL (todas as áreas, comportamento de sempre), um array de 1 pro
+    // ciclo de área única legado, ou um array de 2+ quando o ciclo foi
+    // aberto marcando várias áreas juntas (novo). O resto desta função
+    // NÃO muda — ela já processa `areas` uma por uma dentro do `for`
+    // abaixo, então Avaliação de Colegas continua estritamente dentro da
+    // mesma área, mesmo quando várias áreas compartilham este cycleId.
+    const selectedAreaIds = resolveGroupAreaIds(cycle);
 
     const areas = await this.prisma.area.findMany({
-      where: cycle.areaId ? { id: cycle.areaId } : undefined,
+      where: selectedAreaIds ? { id: { in: selectedAreaIds } } : undefined,
       include: { users: { where: { active: true, role: { not: UserRole.ADMIN } } } },
     });
 
@@ -390,13 +413,24 @@ class PulseCyclesService {
 
   findAll() {
     return this.prisma.pulseCycle.findMany({
-      include: { area: { select: { name: true } } },
+      include: { area: { select: { name: true } }, areas: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   create(dto: CreateCycleDto) {
-    return this.prisma.pulseCycle.create({ data: { label: dto.label, areaId: dto.areaId ?? null } });
+    // v1.7.0 — Multi-área (seção 5.59): 0 área = Geral (igual sempre); 1
+    // área grava também no `areaId` legado (compatibilidade total com o
+    // resto do código que ainda lê só `areaId`); 2+ áreas usa exclusivamente
+    // o novo relacionamento `areas`, com `areaId` ficando null.
+    const areaIds = (dto.areaIds ?? []).filter(Boolean);
+    return this.prisma.pulseCycle.create({
+      data: {
+        label: dto.label,
+        areaId: areaIds.length === 1 ? areaIds[0] : (dto.areaId ?? null),
+        ...(areaIds.length > 0 ? { areas: { connect: areaIds.map((id) => ({ id })) } } : {}),
+      },
+    });
   }
 
   async open(id: string, dto: OpenCycleDto) {
