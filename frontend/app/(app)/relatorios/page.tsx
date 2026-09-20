@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, FileBarChart } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth-context';
 import { ReportListItem } from '../../../lib/types';
@@ -15,6 +15,25 @@ export default function RelatoriosPage() {
   const router = useRouter();
   const [items, setItems] = useState<ReportListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [generatingOnePage, setGeneratingOnePage] = useState(false);
+  const [onePageError, setOnePageError] = useState('');
+
+  // v1.8.0 — One Page Executiva (seção 5.60): resumo de uma página com
+  // todas as áreas geridas, pronto pra apresentar à Diretoria.
+  async function handleGenerateOnePage() {
+    setGeneratingOnePage(true);
+    setOnePageError('');
+    try {
+      const blob = await api.getBlob('/pulse-reports/one-page/pdf');
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (err) {
+      setOnePageError(err instanceof Error ? err.message : 'Erro ao gerar a One Page Executiva.');
+    } finally {
+      setGeneratingOnePage(false);
+    }
+  }
 
   useEffect(() => {
     const endpoint = user?.role === 'ADMIN' ? '/pulse-reports/all' : '/pulse-reports';
@@ -31,7 +50,20 @@ export default function RelatoriosPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-p-primary-dark mb-1">Relatórios</h1>
+      <div className="flex items-start justify-between gap-4 mb-1">
+        <h1 className="text-xl font-semibold text-p-primary-dark">Relatórios</h1>
+        {user?.role === 'GESTOR' && (
+          <button
+            onClick={handleGenerateOnePage}
+            disabled={generatingOnePage}
+            className="flex items-center gap-2 bg-p-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-60 shrink-0"
+          >
+            <FileBarChart size={16} />
+            {generatingOnePage ? 'Gerando...' : 'Gerar One Page Executiva'}
+          </button>
+        )}
+      </div>
+      {onePageError && <p className="text-sm text-red-600 mb-2">{onePageError}</p>}
       <p className="text-sm text-p-neutral mb-6">
         {user?.role === 'ADMIN'
           ? 'Todos os relatórios de todos os ciclos.'
