@@ -6,6 +6,12 @@ export interface AiAnalysisResult {
   trends: string;
   summary: string;
   suggestedOpinion: string;
+  // v1.8.2 — itens curtos (não frases) pra One Page Executiva: 3 pontos
+  // fortes, 3 pontos de melhoria e 3 motivos de valorização pro RH, cada
+  // um condensado num item (palavra ou expressão curta), não uma frase.
+  strengthsItems: string[];
+  improvementItems: string[];
+  valuationItems: string[];
 }
 
 interface AnalysisInput {
@@ -74,6 +80,9 @@ export class AnthropicService {
         trends: parsed.trends ?? '',
         summary: parsed.summary ?? '',
         suggestedOpinion: parsed.suggestedOpinion ?? '',
+        strengthsItems: this.sanitizeItems(parsed.strengthsItems),
+        improvementItems: this.sanitizeItems(parsed.improvementItems),
+        valuationItems: this.sanitizeItems(parsed.valuationItems),
       };
     } catch (err) {
       this.logger.error(`Falha ao gerar análise preditiva: ${(err as Error).message}. Usando fallback.`);
@@ -105,8 +114,21 @@ Com base nesses dados, responda APENAS com um JSON válido (sem markdown, sem te
   "improvements": "pontos de melhoria, em português, 2-3 frases",
   "trends": "tendências observadas nos comentários, em português, 1-2 frases",
   "summary": "resumo geral da avaliação, em português, 2-3 frases",
-  "suggestedOpinion": "um parecer final sugerido para o gestor revisar e ajustar, em português, 3-4 frases, tom profissional e construtivo"
-}`;
+  "suggestedOpinion": "um parecer final sugerido para o gestor revisar e ajustar, em português, 3-4 frases, tom profissional e construtivo",
+  "strengthsItems": ["3 pontos fortes, cada um como um ITEM CURTO (uma palavra ou expressão de até 4-5 palavras, nunca uma frase completa, sem ponto final) — ex: 'Disciplina', 'Entregas consistentes', 'Colaboração com o time'"],
+  "improvementItems": ["3 pontos de melhoria no mesmo formato de item curto — ex: 'Gestão do tempo', 'Priorização de tarefas'"],
+  "valuationItems": ["3 motivos curtos, no mesmo formato de item, pelos quais o RH deveria valorizar/reter esse colaborador (considerando desempenho, entrega e comportamento — NÃO fale de salário aqui) — ex: 'Referência técnica na área', 'Baixo turnover de conhecimento', 'Mentoria de colegas mais novos'"]
+}
+
+IMPORTANTE: "strengthsItems", "improvementItems" e "valuationItems" devem ter EXATAMENTE 3 itens cada, e cada item deve ser curto (uma palavra ou expressão pequena) — nunca uma frase inteira nem texto truncado com "...".`;
+  }
+
+  private sanitizeItems(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+      .map((v) => v.trim().replace(/\.$/, ''))
+      .slice(0, 3);
   }
 
   private fallbackAnalysis(input: AnalysisInput): AiAnalysisResult {
@@ -116,6 +138,9 @@ Com base nesses dados, responda APENAS com um JSON válido (sem markdown, sem te
       trends: 'Não foi possível gerar a análise automática no momento.',
       summary: `Score final: ${input.finalScore.toFixed(1)} (${input.scoreBand}). Análise preditiva ainda não configurada no ambiente do servidor.`,
       suggestedOpinion: '',
+      strengthsItems: [],
+      improvementItems: [],
+      valuationItems: [],
     };
   }
 }

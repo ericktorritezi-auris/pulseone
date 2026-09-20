@@ -1,6 +1,6 @@
 {
   "name": "pulseone",
-  "version": "1.8.1",
+  "version": "1.8.3",
   "private": true,
   "description": "PulseOne — serviço único Railway (backend NestJS + frontend Next.js no mesmo container)",
   "scripts": {

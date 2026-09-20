@@ -338,6 +338,16 @@ model PulseAiAnalysis {
   trends           String
   summary          String
   suggestedOpinion String
+  // v1.8.2 — itens curtos (não frases) gerados pela mesma chamada de IA,
+  // usados na One Page Executiva (seção 5.60/5.62): 3 pontos fortes, 3
+  // pontos de melhoria e 3 motivos de valorização pro RH, cada um já
+  // nascendo como um item condensado (palavra ou expressão curta), nunca
+  // uma frase longa truncada. Mantidos junto dos campos de texto livre
+  // acima (usados na Análise Preditiva do relatório individual) — nenhum
+  // dado antigo é perdido, só adiciona.
+  strengthsItems    String[] @default([])
+  improvementItems  String[] @default([])
+  valuationItems    String[] @default([])
   model            String
   regenCount       Int         @default(0)
   createdAt        DateTime    @default(now())

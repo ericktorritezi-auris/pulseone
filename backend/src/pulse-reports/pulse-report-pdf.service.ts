@@ -93,41 +93,15 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-// Corta uma frase longa demais na última PALAVRA que ainda cabe (nunca no
-// meio de uma palavra) — pedido do Erick (v1.8.1): o corte no meio da
-// palavra/frase "parecia cortado" na tela, feio de ver num documento pra
-// Diretoria.
-function truncateAtWord(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  const slice = text.slice(0, maxLen);
-  const lastSpace = slice.lastIndexOf(' ');
-  const safe = lastSpace > maxLen * 0.5 ? slice.slice(0, lastSpace) : slice;
-  return safe.trimEnd() + '…';
-}
-
-// v1.8.1 — pedido do Erick: 1 frase só (com corte no meio) "cortava" a
-// análise demais. Agora extrai ATÉ 3 frases do parágrafo da IA (cada uma
-// truncada com segurança na palavra, nunca no meio dela), pra virar 3
-// pontos de destaque / 3 pontos de melhoria por colaborador, em vez de 1
-// linha só. Retorna [] (não null) quando não há texto — mais fácil de
-// checar `.length === 0` no template.
-export function topSentences(text: string | null, maxCount = 3, maxLenEach = 90): string[] {
-  if (!text) return [];
-  const sentences = text
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  const source = sentences.length > 0 ? sentences : [text.trim()];
-  return source.slice(0, maxCount).map((s) => truncateAtWord(s, maxLenEach));
-}
-
 export interface OnePageColaborador {
   fullName: string;
   positionName: string | null;
   tenureLabel: string;
   score: number | null;
   scoreBand: string | null;
-  // v1.8.1 — pedido do Erick: 3 pontos cada (era 1 frase truncada demais).
+  // v1.8.2 — pedido do Erick: itens curtos (palavra/expressão), não frase
+  // truncada. Vêm prontos de `PulseAiAnalysis.strengthsItems`/
+  // `improvementItems`, gerados pela IA junto da Análise Preditiva.
   pontosForte: string[];
   pontosMelhoria: string[];
 }
@@ -264,14 +238,40 @@ export class PulseReportPdfService {
 </html>`;
   }
 
-  // v1.8.0 — One Page Executiva (seção 5.60, pedido do Erick): resumo de
-  // UMA PÁGINA (A4 paisagem) com todas as áreas geridas por um gestor,
-  // pronto pra apresentar à Diretoria — score geral do gestor, score por
-  // área, cada colaborador com score/pontos fortes/melhoria, e uma faixa
-  // de sinalização pro RH (retenção, reconhecimento, desenvolvimento).
+  // v1.8.0 — One Page Executiva (seção 5.60, pedido do Erick): resumo
+  // consolidado de todas as áreas geridas por um gestor, pronto pra
+  // apresentar à Diretoria — score geral do gestor, score por área, cada
+  // colaborador com score/pontos fortes/melhoria, e uma página de
+  // sinalização pro RH (valorização, desenvolvimento).
+  //
+  // v1.8.2 (pedido do Erick) — deixou de ser "uma página só espremida":
+  // agora é um RELATÓRIO EXECUTIVO de várias páginas — capa com o resumo
+  // geral, DEPOIS uma página inteira por área (cabeçalho próprio + espaço
+  // de sobra pros colaboradores) e uma página final de RH. Cada página é
+  // um bloco `.page` com `page-break-after: always` (menos a última), e
+  // os pontos fortes/melhoria/valorização são ITENS CURTOS (uma
+  // palavra/expressão, nunca frase longa) — vêm prontos da Análise IA
+  // (`strengthsItems`/`improvementItems`/`valuationItems`), sem truncar
+  // nada aqui.
   buildOnePageHtml(data: OnePageData): string {
     const geralColor = semaforoColor(data.bandGeral);
     const geralBg = semaforoBg(data.bandGeral);
+    const totalPages = 1 + data.areas.length + (data.rhAlertas.length > 0 ? 1 : 0);
+
+    // Itens curtos (pontos fortes/melhoria/valorização) — renderizados como
+    // "chips"/tags, não bullets de frase, já que agora são palavras/expressões
+    // curtas (pedido explícito do Erick: "eu quero que a gente condense num
+    // bullet com três pontos... pode ser uma frase, pode ser uma composição,
+    // mas [não] frase inteira").
+    const chipList = (items: string[], bg: string, color: string) =>
+      items.length > 0
+        ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;">${items
+            .map(
+              (t) =>
+                `<span style="display:inline-block;font-size:9px;font-weight:600;padding:2px 8px;border-radius:10px;background:${bg};color:${color};white-space:nowrap;">${escapeHtml(t)}</span>`,
+            )
+            .join('')}</div>`
+        : '';
 
     const barsHtml = data.areas
       .map((area) => {
@@ -279,100 +279,195 @@ export class PulseReportPdfService {
         const color = semaforoColor(area.scoreBandArea);
         const avgPct = Math.max(0, Math.min(100, data.scoreGeral ?? 0));
         return `
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
-          <div style="width:100px;font-size:9px;font-weight:600;color:#14181f;flex-shrink:0;">${escapeHtml(area.areaName)}</div>
-          <div style="flex:1;height:7px;background:#e7edf7;border-radius:4px;overflow:hidden;position:relative;">
-            <div style="height:100%;border-radius:4px;width:${Math.max(0, Math.min(100, value))}%;background:${color};"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">
+          <div style="width:130px;font-size:11px;font-weight:600;color:#14181f;flex-shrink:0;">${escapeHtml(area.areaName)}</div>
+          <div style="flex:1;height:9px;background:#e7edf7;border-radius:5px;overflow:hidden;position:relative;">
+            <div style="height:100%;border-radius:5px;width:${Math.max(0, Math.min(100, value))}%;background:${color};"></div>
             <div style="position:absolute;top:-2px;bottom:-2px;width:1.5px;background:#14181f;opacity:0.35;left:${avgPct}%;"></div>
           </div>
-          <div style="width:24px;text-align:right;font-size:9px;font-weight:700;flex-shrink:0;">${area.scoreArea !== null ? Math.round(area.scoreArea) : '—'}</div>
+          <div style="width:28px;text-align:right;font-size:11px;font-weight:700;flex-shrink:0;">${area.scoreArea !== null ? Math.round(area.scoreArea) : '—'}</div>
         </div>`;
       })
       .join('');
 
-    const areaCardsHtml = data.areas
-      .map((area) => {
+    // Cabeçalho compacto, repetido no topo de toda página que não seja a
+    // capa — mantém o documento identificável mesmo passando várias
+    // páginas na Diretoria.
+    const pageHeader = (pageLabel: string, pageNum: number) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid #1c3faa;padding-bottom:6px;margin-bottom:12px;">
+        <div style="display:flex;align-items:baseline;gap:8px;">
+          <span style="font-size:13px;font-weight:800;color:#1c3faa;">Pulse<span style="color:#2a78d6;">One</span></span>
+          <span style="font-size:10px;color:#52586a;">${escapeHtml(pageLabel)}</span>
+        </div>
+        <div style="font-size:8.5px;color:#8890a2;">${escapeHtml(data.gestor.fullName)} · Página ${pageNum} de ${totalPages}</div>
+      </div>`;
+
+    const footer = `
+      <div style="position:absolute;bottom:14px;left:22px;right:22px;display:flex;justify-content:space-between;font-size:7.5px;color:#8890a2;border-top:1px solid #dfe3ea;padding-top:5px;">
+        <span>PulseOne · Documento gerado automaticamente a partir dos dados do ciclo · Uso interno e confidencial</span>
+        <span>Relatório Executivo de Gestão</span>
+      </div>`;
+
+    // ---- Página 1: capa / resumo geral ----
+    const indexItems = [
+      'Visão Geral',
+      ...data.areas.map((a) => a.areaName),
+      ...(data.rhAlertas.length > 0 ? ['Pontos de Atenção para o RH'] : []),
+    ];
+
+    const coverPage = `
+    <div class="page">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1c3faa;padding-bottom:8px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:19px;font-weight:800;color:#1c3faa;">Pulse<span style="color:#2a78d6;">One</span></div>
+          <div style="font-size:11px;color:#52586a;margin-top:2px;">Relatório Executivo de Gestão — Consolidado por Área</div>
+        </div>
+        <div style="text-align:right;font-size:9.5px;color:#52586a;line-height:1.6;">
+          <div>${escapeHtml(data.cicloResumo)}</div>
+          <div>Gerado em: <b>${escapeHtml(data.geradoEm)}</b></div>
+          <div style="display:inline-block;margin-top:3px;font-size:8px;font-weight:700;color:#8a1f1f;background:#fbe7e7;border:1px solid #f0bcbc;padding:2px 8px;border-radius:10px;">CONFIDENCIAL — USO INTERNO / DIRETORIA</div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#f6f7fa;border:1px solid #dfe3ea;border-radius:9px;padding:10px 14px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:16px;font-weight:700;">${escapeHtml(data.gestor.fullName)}</div>
+          <div style="font-size:10px;color:#52586a;">${data.gestor.positionName ? escapeHtml(data.gestor.positionName) + ' · ' : ''}${data.totalAreas} área(s) gerida(s)</div>
+        </div>
+        <div style="font-size:9px;color:#52586a;text-align:right;max-width:340px;">
+          Resumo executivo da atuação do gestor em todas as áreas sob sua responsabilidade neste ciclo.
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns: 1.3fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div style="border:1px solid #dfe3ea;border-radius:9px;padding:8px 12px;display:flex;align-items:center;gap:10px;background:${geralBg};border-color:${geralColor}33;">
+          <div style="width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;flex-shrink:0;background:${geralColor};">${data.scoreGeral !== null ? Math.round(data.scoreGeral) : '—'}</div>
+          <div>
+            <div style="font-size:8.5px;color:#52586a;text-transform:uppercase;">Score Geral do Gestor</div>
+            <div style="font-size:16px;font-weight:800;line-height:1.1;">${data.scoreGeral !== null ? Math.round(data.scoreGeral) : '—'} / 100</div>
+            <span style="font-size:8.5px;font-weight:700;color:${geralColor};">${data.bandGeral ?? '—'}</span>
+          </div>
+        </div>
+        <div style="border:1px solid #dfe3ea;border-radius:9px;padding:8px 12px;display:flex;align-items:center;gap:10px;">
+          <div style="width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;flex-shrink:0;background:#2a78d6;">${data.totalColaboradores}</div>
+          <div><div style="font-size:8.5px;color:#52586a;text-transform:uppercase;">Colaboradores</div><div style="font-size:16px;font-weight:800;">${data.totalColaboradores} pessoas</div></div>
+        </div>
+        <div style="border:1px solid #dfe3ea;border-radius:9px;padding:8px 12px;display:flex;align-items:center;gap:10px;">
+          <div style="width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;flex-shrink:0;background:#0ca30c;">${data.areasEmZonaVerde}</div>
+          <div><div style="font-size:8.5px;color:#52586a;text-transform:uppercase;">Áreas em zona verde</div><div style="font-size:16px;font-weight:800;">${data.areasEmZonaVerde} de ${data.totalAreas}</div></div>
+        </div>
+        <div style="border:1px solid #dfe3ea;border-radius:9px;padding:8px 12px;display:flex;align-items:center;gap:10px;">
+          <div style="width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;flex-shrink:0;background:${data.rhAlertas.length > 0 ? '#c23030' : '#0ca30c'};">${data.rhAlertas.length}</div>
+          <div><div style="font-size:8.5px;color:#52586a;text-transform:uppercase;">Pontos de atenção RH</div><div style="font-size:16px;font-weight:800;">${data.rhAlertas.length} sinalizado(s)</div></div>
+        </div>
+      </div>
+
+      <div style="border:1px solid #dfe3ea;border-radius:9px;padding:10px 14px;margin-bottom:12px;">
+        <div style="font-size:9.5px;font-weight:700;color:#52586a;text-transform:uppercase;margin-bottom:8px;">Score médio por área (linha = média geral do gestor · ${data.scoreGeral !== null ? Math.round(data.scoreGeral) : '—'})</div>
+        ${barsHtml || '<p style="font-size:10px;color:#8890a2;">Nenhuma área gerida tem um ciclo finalizado/arquivado ainda.</p>'}
+      </div>
+
+      <div style="border:1px solid #dfe3ea;border-radius:9px;padding:10px 14px;">
+        <div style="font-size:9.5px;font-weight:700;color:#52586a;text-transform:uppercase;margin-bottom:6px;">Neste relatório</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          ${indexItems.map((label, i) => `<span style="font-size:9px;font-weight:600;padding:3px 10px;border-radius:10px;background:#eef1f8;color:#1c3faa;">${i + 1}. ${escapeHtml(label)}</span>`).join('')}
+        </div>
+      </div>
+
+      ${footer}
+    </div>`;
+
+    // ---- Uma página por área ----
+    const areaPages = data.areas
+      .map((area, idx) => {
         const areaColor = semaforoColor(area.scoreBandArea);
         const areaBg = semaforoBg(area.scoreBandArea);
-        const bulletList = (items: string[], color: string) =>
-          items.length > 0
-            ? `<ul style="margin:1px 0 0;padding-left:9px;">${items
-                .map((t) => `<li style="font-size:6.8px;line-height:1.35;color:${color};margin-bottom:0.5px;">${escapeHtml(t)}</li>`)
-                .join('')}</ul>`
-            : '';
 
         const peopleHtml = area.colaboradores
           .map((p) => {
             const color = semaforoColor(p.scoreBand);
             const hasAnalise = p.pontosForte.length > 0 || p.pontosMelhoria.length > 0;
             return `
-            <div style="break-inside:avoid;border-bottom:1px dashed #dfe3ea;padding-bottom:5px;margin-bottom:5px;">
-              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;">
-                <span style="font-size:8.8px;font-weight:700;">${escapeHtml(p.fullName)}</span>
-                <span style="font-size:7px;color:#8890a2;flex-shrink:0;">${escapeHtml(p.tenureLabel)} de casa</span>
-                <span style="font-size:8.8px;font-weight:800;color:${color};flex-shrink:0;">${p.score !== null ? Math.round(p.score) : '—'}</span>
+            <div style="break-inside:avoid;border:1px solid #e7eaf0;border-radius:8px;padding:9px 12px;margin-bottom:9px;">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+                <span style="font-size:12px;font-weight:700;">${escapeHtml(p.fullName)}</span>
+                <span style="font-size:9px;color:#8890a2;flex-shrink:0;">${escapeHtml(p.tenureLabel)} de casa</span>
+                <span style="font-size:12px;font-weight:800;color:${color};flex-shrink:0;">${p.score !== null ? Math.round(p.score) : '—'}</span>
               </div>
-              ${p.positionName ? `<div style="font-size:6.8px;color:#8890a2;">${escapeHtml(p.positionName)}</div>` : ''}
+              ${p.positionName ? `<div style="font-size:9px;color:#8890a2;margin-top:1px;">${escapeHtml(p.positionName)}</div>` : ''}
               ${
                 hasAnalise
                   ? `
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:2px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px;">
                 <div>
-                  <div style="font-size:6.2px;font-weight:700;text-transform:uppercase;color:#1c6b1c;">Pontos fortes</div>
-                  ${bulletList(p.pontosForte, '#1c6b1c') || '<span style="font-size:6.6px;color:#8890a2;">—</span>'}
+                  <div style="font-size:7.8px;font-weight:700;text-transform:uppercase;color:#1c6b1c;">Pontos fortes</div>
+                  ${chipList(p.pontosForte, '#e6f6e6', '#1c6b1c') || '<span style="font-size:8.5px;color:#8890a2;">—</span>'}
                 </div>
                 <div>
-                  <div style="font-size:6.2px;font-weight:700;text-transform:uppercase;color:#8a5c05;">A desenvolver</div>
-                  ${bulletList(p.pontosMelhoria, '#8a5c05') || '<span style="font-size:6.6px;color:#8890a2;">—</span>'}
+                  <div style="font-size:7.8px;font-weight:700;text-transform:uppercase;color:#8a5c05;">A desenvolver</div>
+                  ${chipList(p.pontosMelhoria, '#fef2df', '#8a5c05') || '<span style="font-size:8.5px;color:#8890a2;">—</span>'}
                 </div>
               </div>`
-                  : `<div style="font-size:6.6px;color:#8890a2;margin-top:2px;">Sem análise IA gerada para este colaborador neste ciclo.</div>`
+                  : `<div style="font-size:8.5px;color:#8890a2;margin-top:5px;">Sem análise IA gerada para este colaborador neste ciclo.</div>`
               }
             </div>`;
           })
           .join('');
 
         return `
-        <div style="break-inside:avoid;border:1px solid #dfe3ea;border-radius:8px;background:#fff;display:flex;flex-direction:column;overflow:hidden;">
-          <div style="padding:4px 6px;background:#f6f7fa;border-bottom:1px solid #dfe3ea;display:flex;justify-content:space-between;align-items:center;">
+        <div class="page">
+          ${pageHeader(`Área — ${area.areaName}`, idx + 2)}
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
             <div>
-              <div style="font-size:9.5px;font-weight:800;">${escapeHtml(area.areaName)}</div>
-              <div style="font-size:7px;color:#52586a;">${area.colaboradores.length} colaborador(es)</div>
+              <div style="font-size:17px;font-weight:800;">${escapeHtml(area.areaName)}</div>
+              <div style="font-size:10px;color:#52586a;">${area.colaboradores.length} colaborador(es) neste ciclo</div>
             </div>
-            <div style="display:flex;align-items:center;gap:3px;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:10px;background:${areaBg};color:${areaColor};">
-              <span style="width:8px;height:8px;border-radius:50%;display:inline-block;background:${areaColor};"></span>${area.scoreArea !== null ? Math.round(area.scoreArea) : '—'}
+            <div style="display:flex;align-items:center;gap:5px;font-size:15px;font-weight:800;padding:3px 12px;border-radius:12px;background:${areaBg};color:${areaColor};">
+              <span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${areaColor};"></span>${area.scoreArea !== null ? Math.round(area.scoreArea) : '—'}
             </div>
           </div>
-          <div style="padding:5px 6px;flex:1;">${peopleHtml || '<p style="font-size:8px;color:#8890a2;">Nenhum colaborador com score neste ciclo.</p>'}</div>
+          <div>${peopleHtml || '<p style="font-size:10px;color:#8890a2;">Nenhum colaborador com score neste ciclo.</p>'}</div>
+          ${footer}
         </div>`;
       })
       .join('');
 
-    // v1.8.1 — pedido do Erick: pra quem é "valorização", mostra 3 pontos
-    // de POR QUE valorizar primeiro, e SÓ DEPOIS a defasagem salarial —
-    // nunca o contrário (o salário é a consequência, não a manchete).
-    const rhItemsHtml = data.rhAlertas
-      .map((r) => {
-        const flagStyle = RH_FLAG_CLASS[r.flagKind];
-        const body =
-          r.flagKind === 'valorizacao'
-            ? `
-          ${
-            r.destaques && r.destaques.length > 0
-              ? `<ul style="margin:2px 0 0;padding-left:10px;">${r.destaques.map((d) => `<li style="margin-bottom:1px;">${escapeHtml(d)}</li>`).join('')}</ul>`
-              : ''
-          }
-          ${r.salarioLinha ? `<div style="margin-top:3px;padding-top:3px;border-top:1px dashed #f0d9d0;font-weight:600;">${escapeHtml(r.salarioLinha)}</div>` : ''}`
-            : `<div style="margin-top:2px;">${escapeHtml(r.motivo ?? '')}</div>`;
+    // ---- Página final: Pontos de Atenção para o RH ----
+    // v1.8.1 — pra quem é "valorização", mostra os motivos primeiro, e SÓ
+    // DEPOIS a defasagem salarial (nunca o contrário — o salário é a
+    // consequência, não a manchete).
+    const rhPage =
+      data.rhAlertas.length > 0
+        ? `
+    <div class="page">
+      ${pageHeader('Pontos de Atenção para o RH', totalPages)}
+      <div style="border:1px solid #f0c8c8;border-radius:9px;background:#fff8f5;padding:10px 14px;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:800;color:#8a1f1f;">⚠ Pontos de Atenção para o RH</div>
+        <div style="font-size:9.5px;color:#7a4a30;margin-top:2px;">Cruzamento de score, tempo de casa e faixa salarial do mesmo cargo entre as áreas geridas.</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;">
+        ${data.rhAlertas
+          .map((r) => {
+            const flagStyle = RH_FLAG_CLASS[r.flagKind];
+            const body =
+              r.flagKind === 'valorizacao'
+                ? `
+              ${chipList(r.destaques ?? [], '#e6f6e6', '#1c6b1c')}
+              ${r.salarioLinha ? `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #f0d9d0;font-weight:600;font-size:9.5px;">${escapeHtml(r.salarioLinha)}</div>` : ''}`
+                : `<div style="margin-top:4px;font-size:9.5px;">${escapeHtml(r.motivo ?? '')}</div>`;
 
-        return `
-        <div style="break-inside:avoid;background:#fff;border:1px solid #f0d9d0;border-radius:6px;padding:5px 7px;font-size:7.4px;line-height:1.4;">
-          <b style="font-size:8.2px;">${escapeHtml(r.fullName)}</b> — ${escapeHtml(r.areaName)}
-          ${body}
-          <div><span style="display:inline-block;font-size:6.4px;font-weight:700;padding:0.5px 5px;border-radius:6px;margin-top:3px;background:${flagStyle.bg};color:${flagStyle.color};">${escapeHtml(r.flagLabel)}</span></div>
-        </div>`;
-      })
-      .join('');
+            return `
+            <div style="break-inside:avoid;flex:1 1 30%;min-width:230px;background:#fff;border:1px solid #f0d9d0;border-radius:8px;padding:9px 12px;font-size:9.5px;line-height:1.4;">
+              <b style="font-size:11px;">${escapeHtml(r.fullName)}</b> — ${escapeHtml(r.areaName)}
+              ${body}
+              <div><span style="display:inline-block;font-size:8px;font-weight:700;padding:2px 8px;border-radius:8px;margin-top:6px;background:${flagStyle.bg};color:${flagStyle.color};">${escapeHtml(r.flagLabel)}</span></div>
+            </div>`;
+          })
+          .join('')}
+      </div>
+      ${footer}
+    </div>`
+        : '';
 
     return `
 <!DOCTYPE html>
@@ -381,113 +476,16 @@ export class PulseReportPdfService {
 <meta charset="UTF-8" />
 <style>
   * { box-sizing: border-box; font-family: 'Helvetica', 'Arial', sans-serif; }
-  body { margin: 0; padding: 12px 16px; color: #14181f; }
-  .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #1c3faa; padding-bottom:6px; margin-bottom:8px; }
-  .brand-name { font-size:15px; font-weight:800; color:#1c3faa; }
-  .doc-title { font-size:9.5px; color:#52586a; margin-top:1px; }
-  .header-meta { text-align:right; font-size:8.5px; color:#52586a; line-height:1.5; }
-  .confidential { display:inline-block; margin-top:2px; font-size:7.5px; font-weight:700; color:#8a1f1f; background:#fbe7e7; border:1px solid #f0bcbc; padding:1px 6px; border-radius:10px; }
-  .manager-strip { display:flex; align-items:center; justify-content:space-between; background:#f6f7fa; border:1px solid #dfe3ea; border-radius:8px; padding:6px 10px; margin-bottom:8px; }
-  .manager-name { font-size:12.5px; font-weight:700; }
-  .manager-role { font-size:8.5px; color:#52586a; }
-  .stats-row { display:grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap:8px; margin-bottom:8px; }
-  .tile { border:1px solid #dfe3ea; border-radius:8px; padding:6px 10px; display:flex; align-items:center; gap:8px; }
-  .ring { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; color:#fff; flex-shrink:0; }
-  .tile-label { font-size:7.5px; color:#52586a; text-transform:uppercase; }
-  .tile-value { font-size:14px; font-weight:800; line-height:1.1; }
-  .chart-card { border:1px solid #dfe3ea; border-radius:8px; padding:6px 10px; margin-bottom:8px; }
-  .chart-title { font-size:8px; font-weight:700; color:#52586a; text-transform:uppercase; margin-bottom:5px; }
-  /* v1.8.1: flex-wrap em vez de grid de colunas fixas — com 3 pontos de
-     força/melhoria por pessoa, o card de cada área ficou mais alto e
-     variável; grid fixo cortava/espremia mal quando o conteúdo excede uma
-     página. Flex-wrap deixa cada área virar bloco próprio (com
-     break-inside:avoid inline), que o Chromium consegue empurrar pra
-     página seguinte inteiro quando não cabe, em vez de cortar no meio. */
-  .areas-grid { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
-  .areas-grid > div { flex: 1 1 ${Math.floor(100 / Math.max(1, Math.min(4, data.areas.length)))}%; min-width:210px; }
-  .rh-band { border:1px solid #f0c8c8; border-radius:8px; background:#fff8f5; padding:6px 10px; display:grid; grid-template-columns: 1fr 3fr; gap:10px; align-items:center; }
-  .rh-title { font-size:9px; font-weight:800; color:#8a1f1f; }
-  .rh-sub { font-size:7px; color:#7a4a30; margin-top:1px; }
-  .rh-items { display:flex; flex-wrap:wrap; gap:6px; }
-  .rh-items > div { flex: 1 1 30%; min-width:200px; }
-  .footer { display:flex; justify-content:space-between; font-size:6.6px; color:#8890a2; border-top:1px solid #dfe3ea; padding-top:4px; margin-top:8px; }
+  body { margin: 0; color: #14181f; }
+  .page { position:relative; padding: 18px 22px 44px; page-break-after: always; min-height: 780px; }
+  .page:last-of-type { page-break-after: auto; }
+  @media print { .page { page-break-after: always; } .page:last-of-type { page-break-after: auto; } }
 </style>
 </head>
 <body>
-
-  <div class="header">
-    <div>
-      <div class="brand-name">Pulse<span style="color:#2a78d6;">One</span></div>
-      <div class="doc-title">One Page Executiva — Consolidado de Gestão</div>
-    </div>
-    <div class="header-meta">
-      <div>${escapeHtml(data.cicloResumo)}</div>
-      <div>Gerado em: <b>${escapeHtml(data.geradoEm)}</b></div>
-      <div class="confidential">CONFIDENCIAL — USO INTERNO / DIRETORIA</div>
-    </div>
-  </div>
-
-  <div class="manager-strip">
-    <div>
-      <div class="manager-name">${escapeHtml(data.gestor.fullName)}</div>
-      <div class="manager-role">${data.gestor.positionName ? escapeHtml(data.gestor.positionName) + ' · ' : ''}${data.totalAreas} área(s) gerida(s)</div>
-    </div>
-    <div style="font-size:7.8px;color:#52586a;text-align:right;max-width:320px;">
-      Resumo em uma página da atuação do gestor nas áreas sob sua responsabilidade neste ciclo.
-    </div>
-  </div>
-
-  <div class="stats-row">
-    <div class="tile" style="background:${geralBg};border-color:${geralColor}33;">
-      <div class="ring" style="background:${geralColor};">${data.scoreGeral !== null ? Math.round(data.scoreGeral) : '—'}</div>
-      <div>
-        <div class="tile-label">Score Geral do Gestor</div>
-        <div class="tile-value">${data.scoreGeral !== null ? Math.round(data.scoreGeral) : '—'} / 100</div>
-        <span style="font-size:7.5px;font-weight:700;color:${geralColor};">${data.bandGeral ?? '—'}</span>
-      </div>
-    </div>
-    <div class="tile">
-      <div class="ring" style="background:#2a78d6;">${data.totalColaboradores}</div>
-      <div><div class="tile-label">Colaboradores</div><div class="tile-value">${data.totalColaboradores} pessoas</div></div>
-    </div>
-    <div class="tile">
-      <div class="ring" style="background:#0ca30c;">${data.areasEmZonaVerde}</div>
-      <div><div class="tile-label">Áreas em zona verde</div><div class="tile-value">${data.areasEmZonaVerde} de ${data.totalAreas}</div></div>
-    </div>
-    <div class="tile">
-      <div class="ring" style="background:${data.rhAlertas.length > 0 ? '#c23030' : '#0ca30c'};">${data.rhAlertas.length}</div>
-      <div><div class="tile-label">Pontos de atenção RH</div><div class="tile-value">${data.rhAlertas.length} sinalizado(s)</div></div>
-    </div>
-  </div>
-
-  <div class="chart-card">
-    <div class="chart-title">Score médio por área (linha = média geral do gestor · ${data.scoreGeral !== null ? Math.round(data.scoreGeral) : '—'})</div>
-    ${barsHtml}
-  </div>
-
-  <div class="areas-grid">${
-    areaCardsHtml ||
-    '<p style="font-size:9px;color:#8890a2;grid-column:1/-1;">Nenhuma área gerida tem um ciclo finalizado/arquivado ainda — feche e consolide um ciclo pra essa área aparecer aqui.</p>'
-  }</div>
-
-  ${
-    data.rhAlertas.length > 0
-      ? `
-  <div class="rh-band">
-    <div>
-      <div class="rh-title">⚠ Pontos de Atenção para o RH</div>
-      <div class="rh-sub">Cruzamento de score, tempo de casa e faixa salarial do mesmo cargo entre as áreas geridas.</div>
-    </div>
-    <div class="rh-items">${rhItemsHtml}</div>
-  </div>`
-      : ''
-  }
-
-  <div class="footer">
-    <span>PulseOne · Documento gerado automaticamente a partir dos dados do ciclo · Uso interno e confidencial</span>
-    <span>One Page Executiva</span>
-  </div>
-
+  ${coverPage}
+  ${areaPages}
+  ${rhPage}
 </body>
 </html>`;
   }

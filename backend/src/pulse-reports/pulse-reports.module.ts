@@ -9,6 +9,7 @@ import {
   NotFoundException,
   Param,
   Patch,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -24,7 +25,6 @@ import { AnthropicModule } from '../anthropic/anthropic.module';
 import { AnthropicService } from '../anthropic/anthropic.service';
 import {
   PulseReportPdfService,
-  topSentences,
   OnePageData,
   OnePageArea,
   OnePageColaborador,
@@ -392,6 +392,9 @@ export class PulseReportsService {
         trends: result.trends,
         summary: result.summary,
         suggestedOpinion: result.suggestedOpinion,
+        strengthsItems: result.strengthsItems,
+        improvementItems: result.improvementItems,
+        valuationItems: result.valuationItems,
         model: process.env.ANTHROPIC_MODEL ?? 'não configurado',
       },
       update: {
@@ -400,6 +403,9 @@ export class PulseReportsService {
         trends: result.trends,
         summary: result.summary,
         suggestedOpinion: result.suggestedOpinion,
+        strengthsItems: result.strengthsItems,
+        improvementItems: result.improvementItems,
+        valuationItems: result.valuationItems,
         model: process.env.ANTHROPIC_MODEL ?? 'não configurado',
         regenCount: (existing?.regenCount ?? 0) + 1,
       },
@@ -533,7 +539,42 @@ function tenureMonths(dataInicioEmpresa: Date | null): number {
 export class OnePageExecutivaService {
   constructor(private prisma: PrismaService) {}
 
-  async build(requesterId: string): Promise<OnePageData> {
+  // v1.8.3 — pedido do Erick: o Relatório Executivo (seção 5.60) sempre
+  // pegava, por trás dos panos e por área, "o ciclo mais recente
+  // finalizado/arquivado" — sem avisar qual, e sem deixar o gestor
+  // escolher. Isso funciona bem quando todas as áreas fecham o Pulse
+  // juntas (premissa confirmada com o Erick), mas ficava implícito demais
+  // — por exemplo, ao abrir um ciclo novo, não dava pra gerar o executivo
+  // do ciclo ANTERIOR sem esperar o próximo fechar. Esse método lista os
+  // ciclos fechados disponíveis (mais recente primeiro) pra alimentar um
+  // seletor na tela, antes de gerar o PDF.
+  async listCycles(requesterId: string): Promise<{ id: string; label: string; openedAt: Date | null }[]> {
+    const gestor = await this.prisma.user.findUniqueOrThrow({
+      where: { id: requesterId },
+      select: { managedAreas: { select: { id: true } } },
+    });
+
+    if (gestor.managedAreas.length === 0) {
+      throw new BadRequestException('Você não gerencia nenhuma área ainda — não há o que resumir.');
+    }
+
+    return this.prisma.pulseCycle.findMany({
+      where: {
+        status: { in: [PulseCycleStatus.FINALIZADO, PulseCycleStatus.ARQUIVADO] },
+        ...areaGroupWhere(gestor.managedAreas.map((a) => a.id)),
+      },
+      select: { id: true, label: true, openedAt: true },
+      orderBy: { openedAt: 'desc' },
+    });
+  }
+
+  // v1.8.3 — `cycleId` agora é opcional e, quando informado (vindo do
+  // seletor de ciclo na tela), o MESMO ciclo é usado pra TODAS as áreas
+  // geridas — em vez de cada área buscar "seu" ciclo mais recente de
+  // forma independente (comportamento antigo, mantido como fallback
+  // abaixo só por compatibilidade/robustez, pro caso raro de uma área
+  // ainda não ter fechado esse ciclo específico).
+  async build(requesterId: string, cycleId?: string): Promise<OnePageData> {
     const gestor = await this.prisma.user.findUniqueOrThrow({
       where: { id: requesterId },
       select: {
@@ -545,6 +586,37 @@ export class OnePageExecutivaService {
 
     if (gestor.managedAreas.length === 0) {
       throw new BadRequestException('Você não gerencia nenhuma área ainda — não há o que resumir.');
+    }
+
+    // Sem cycleId explícito (chamada antiga, ou API usada direto): cai no
+    // último ciclo fechado que toca QUALQUER área gerida — mantém
+    // compatibilidade com quem já usava o endpoint sem o seletor novo.
+    let selectedCycle: { id: string; label: string; openedAt: Date | null } | null = null;
+    if (cycleId) {
+      selectedCycle = await this.prisma.pulseCycle.findFirst({
+        where: {
+          id: cycleId,
+          status: { in: [PulseCycleStatus.FINALIZADO, PulseCycleStatus.ARQUIVADO] },
+          ...areaGroupWhere(gestor.managedAreas.map((a) => a.id)),
+        },
+        select: { id: true, label: true, openedAt: true },
+      });
+      if (!selectedCycle) {
+        throw new BadRequestException('Ciclo não encontrado, não finalizado/arquivado, ou fora das suas áreas geridas.');
+      }
+    } else {
+      selectedCycle = await this.prisma.pulseCycle.findFirst({
+        where: {
+          status: { in: [PulseCycleStatus.FINALIZADO, PulseCycleStatus.ARQUIVADO] },
+          ...areaGroupWhere(gestor.managedAreas.map((a) => a.id)),
+        },
+        select: { id: true, label: true, openedAt: true },
+        orderBy: { openedAt: 'desc' },
+      });
+    }
+
+    if (!selectedCycle) {
+      throw new BadRequestException('Nenhum ciclo finalizado/arquivado encontrado pra nenhuma das suas áreas geridas ainda.');
     }
 
     // Liderados diretos (mesma base usada no Dashboard do Gestor — seção
@@ -580,22 +652,23 @@ export class OnePageExecutivaService {
       prevScore: number | null;
       tenureLabel: string;
       tenureMonths: number;
-      topStrength: string | null;
+      valuationItems: string[];
     }[] = [];
 
     let scoreSum = 0;
     let scoreCount = 0;
 
     for (const area of gestor.managedAreas) {
+      // v1.8.3 — o MESMO ciclo escolhido (selectedCycle) é usado pra todas
+      // as áreas. Confirma que esse ciclo específico realmente cobre esta
+      // área (Geral, ou área explícita/legada) — na prática deveria cobrir
+      // sempre, já que as áreas do gestor fecham o Pulse juntas, mas o
+      // check evita mostrar dado de outra área caso algum dia isso mude.
       const areaCycle = await this.prisma.pulseCycle.findFirst({
-        where: {
-          status: { in: [PulseCycleStatus.FINALIZADO, PulseCycleStatus.ARQUIVADO] },
-          ...areaGroupWhere([area.id]),
-        },
+        where: { id: selectedCycle.id, ...areaGroupWhere([area.id]) },
         select: { id: true, label: true, openedAt: true },
-        orderBy: { openedAt: 'desc' },
       });
-      if (!areaCycle) continue; // área sem ciclo consolidado ainda — fica de fora do resumo
+      if (!areaCycle) continue; // ciclo selecionado não cobre essa área — fica de fora do resumo
 
       const membrosDaArea = team.filter((t) => t.areaId === area.id);
       if (membrosDaArea.length === 0) continue;
@@ -641,8 +714,13 @@ export class OnePageExecutivaService {
           salaryByPosition.set(key, entry);
         }
 
-        const pontosForte = topSentences(pulseReport?.aiAnalysis?.strengths ?? null, 3);
-        const pontosMelhoria = topSentences(pulseReport?.aiAnalysis?.improvements ?? null, 3);
+        // v1.8.2 — pedido do Erick: nada de frase truncada. Os itens já
+        // vêm prontos (curtos, 3 cada) da própria Análise IA do relatório
+        // (seção 5.62), gerados junto quando o gestor clica "Gerar Análise
+        // IA" — aqui só lemos o que já foi salvo, sem chamar IA de novo.
+        const pontosForte = pulseReport?.aiAnalysis?.strengthsItems ?? [];
+        const pontosMelhoria = pulseReport?.aiAnalysis?.improvementItems ?? [];
+        const valuationItems = pulseReport?.aiAnalysis?.valuationItems ?? [];
 
         colaboradores.push({
           fullName: membro.fullName,
@@ -664,7 +742,7 @@ export class OnePageExecutivaService {
           prevScore: prevScore?.finalScore ?? null,
           tenureLabel: tenureLabel(membro.dataInicioEmpresa),
           tenureMonths: tenureMonths(membro.dataInicioEmpresa),
-          topStrength: pontosForte[0] ?? null,
+          valuationItems,
         });
       }
 
@@ -721,11 +799,18 @@ export class OnePageExecutivaService {
       // forte (score >= 75). Regra explícita do Erick: "sempre considerar
       // nessa avaliação funcionários com mais de 1 ano de casa".
       if (p.tenureMonths > 12 && p.score !== null && p.score >= 75) {
-        const destaques: string[] = [
-          `Score ${Math.round(p.score)} (banda ${p.scoreBand}) neste ciclo — desempenho consistente.`,
-          `${p.tenureLabel} de casa, com histórico de entrega dentro da área.`,
-          p.topStrength ?? 'Destaque recorrente nas avaliações de sua equipe.',
-        ];
+        // v1.8.2 — os 3 motivos vêm prontos da Análise IA (valuationItems,
+        // seção 5.62), já como itens curtos e completos (nunca frase
+        // truncada). Sem análise IA gerada ainda pro relatório dessa
+        // pessoa, cai num fallback genérico (nunca deixa o card vazio).
+        const destaques: string[] =
+          p.valuationItems.length > 0
+            ? p.valuationItems
+            : [
+                `Score ${Math.round(p.score)} (banda ${p.scoreBand}) neste ciclo.`,
+                `${p.tenureLabel} de casa.`,
+                'Gere a Análise IA do relatório desta pessoa pra ver os motivos detalhados.',
+              ];
 
         let salarioLinha: string;
         const key = p.positionName?.trim().toLowerCase();
@@ -760,7 +845,10 @@ export class OnePageExecutivaService {
 
     return {
       gestor: { fullName: gestor.fullName, positionName: gestor.position?.name ?? null },
-      cicloResumo: 'Ciclo mais recente finalizado/arquivado de cada área',
+      // v1.8.3 — antes era um texto genérico ("ciclo mais recente de cada
+      // área"); agora mostra o rótulo do ciclo específico escolhido no
+      // seletor (ex: "Ciclo: Pulse Setembro/2026").
+      cicloResumo: `Ciclo: ${selectedCycle.label}`,
       geradoEm: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
       scoreGeral,
       bandGeral,
@@ -802,13 +890,25 @@ class PulseReportsController {
   }
 
   // v1.8.0 — One Page Executiva (seção 5.60). Precisa vir ANTES de ':id' —
-  // senão o Nest trataria "one-page" como um id de relatório.
+  // senão o Nest trataria "one-page"/"one-page/cycles" como um id de
+  // relatório.
+  //
+  // v1.8.3 — pedido do Erick: antes de gerar o PDF, a tela pergunta de
+  // qual ciclo Pulse fechado é o relatório (em vez de sempre assumir "o
+  // mais recente" sem avisar). Essa rota alimenta o seletor.
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.GESTOR)
+  @Get('one-page/cycles')
+  getOnePageCycles(@Req() req: { user: AuthUser }) {
+    return this.onePageService.listCycles(req.user.id);
+  }
+
   @UseGuards(RolesGuard)
   @Roles(UserRole.GESTOR)
   @Audit(AuditAction.GERACAO_PDF)
   @Get('one-page/pdf')
-  async getOnePagePdf(@Req() req: { user: AuthUser }, @Res() res: Response) {
-    const data = await this.onePageService.build(req.user.id);
+  async getOnePagePdf(@Req() req: { user: AuthUser }, @Res() res: Response, @Query('cycleId') cycleId?: string) {
+    const data = await this.onePageService.build(req.user.id, cycleId);
     const html = this.pdfService.buildOnePageHtml(data);
     const buffer = await this.pdfService.generatePdf(
       html,
