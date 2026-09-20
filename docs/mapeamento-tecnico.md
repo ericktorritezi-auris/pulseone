@@ -1023,6 +1023,38 @@ Reportado pelo Erick com sistema em produção e ciclos já sendo fechados: o PD
 
 **Hotfix de build (v1.7.1):** o deploy do v1.7.0 quebrou no `nest build` do Railway — mesma classe de problema já documentada na seção 5.54/hotfix v1.6.1: o sandbox onde este código é escrito não consegue gerar o Prisma Client real (download dos binários bloqueado), então um erro de tipo que só aparece com o client de verdade passa despercebido aqui e só é pego no build real do Railway. Neste caso: em `pulse-team.module.ts`, a busca de `activeCycles` incluía `areas: { select: { name: true } }` (só o nome, sem o `id`), mas essa mesma lista era passada pra `resolveGroupAreaIds()`, que precisa do `id` de cada área pra funcionar. Corrigido pra `areas: { select: { id: true, name: true } }`. Build falhado = Railway continuou servindo a versão anterior (v1.6.4) o tempo todo — nada em produção foi afetado por esse erro específico.
 
+### 5.60 One Page Executiva — resumo de uma página pro Gestor apresentar à Diretoria (v1.8.0)
+
+**Origem:** pedido do Erick pra dar ao Gestor uma forma de resumir, numa página só, a atuação dele em TODAS as áreas que gerencia — pronto pra levar à Diretoria: área, colaboradores, score de cada um, pontos fortes/melhoria, e o score geral do gestor (média das áreas). Antes de construir de verdade, foi gerado um PDF de demonstração com dados fictícios pra validar o layout — aprovado o formato, o Erick esclareceu um ponto sobre o cruzamento salarial (ver abaixo) e autorizou a implementação real.
+
+**Botão:** "Gerar One Page Executiva" no topo da tela de Relatórios (`/relatorios`), visível só pra GESTOR — decisão explícita de manter um botão único que gera a visão de TODAS as áreas geridas de uma vez, em vez de um botão por área/ciclo.
+
+**Endpoint:** `GET /pulse-reports/one-page/pdf` (role GESTOR), devolve o PDF direto (mesmo padrão de streaming do `:id/pdf` já existente). Precisou ser declarado ANTES da rota `:id` no controller — senão o Nest trataria "one-page" como um id de relatório.
+
+**De onde vêm os dados (`OnePageExecutivaService`, em `pulse-reports.module.ts`) — nada novo é calculado, só é reunido o que já existe:**
+- Áreas geridas: `User.managedAreas` do próprio gestor logado.
+- Ciclo de cada área: o mais recente FINALIZADO/ARQUIVADO daquela área, usando o mesmo `areaGroupWhere()` da seção 5.59 — já reconhece ciclos multi-área automaticamente, sem código extra.
+- Colaboradores de cada área: liderados diretos (`managerId` = gestor) cuja área principal é aquela.
+- Score de cada colaborador: `PulseScore.finalScore`/`scoreBand` do ciclo da área (já calculado na consolidação, seção 5.1) — o One Page NUNCA recalcula score, só lê.
+- Pontos de força/melhoria: primeira frase de `PulseAiAnalysis.strengths`/`improvements` (a mesma análise por IA que já existe no relatório individual — seção da Análise Preditiva). Se o gestor ainda não gerou a análise IA daquele relatório, aparece "Sem análise IA gerada" no lugar — não dispara geração automática (custaria uma chamada de IA por colaborador toda vez que alguém clicasse no botão).
+- Score Geral do Gestor: **média simples das médias de cada área** (cada área pesa igual, não pondera por número de colaboradores) — exatamente como o Erick pediu: "a média geral do Score de todas as suas áreas".
+- Tempo de casa: `User.dataInicioEmpresa` (Dossiê Confidencial, seção 5.48).
+
+**Semáforo:** 3 cores (verde/amarelo/vermelho) derivadas da MESMA banda de texto (`scoreBand`: Excepcional…Crítico) que o resto do sistema já usa — nunca um limiar numérico paralelo. Verde = Excepcional/Excelente/Muito Bom (≥70), amarelo = Adequado/Atenção (50–69), vermelho = Crítico (<50).
+
+**Faixa de Pontos de Atenção para o RH — a parte pedida explicitamente pelo Erick ("valorização de funcionários... tempo de casa e média salarial"):** cruza score, tempo de casa e salário (Dossiê Confidencial) e aplica 3 regras, em ordem de prioridade (cada pessoa recebe no máximo UM sinalizador, o mais relevante):
+1. **Plano de desenvolvimento** — score atual abaixo de 60, OU queda de 10+ pontos em relação ao ciclo anterior do mesmo colaborador.
+2. **Risco de retenção** — salário 8%+ abaixo da média salarial do MESMO CARGO (por nome, não por `positionId`) **entre todas as áreas geridas pelo gestor** — não a média da empresa toda, nem só da própria área. Essa foi uma correção explícita do Erick durante a conversa: "comparado com todos os cargos de mesmo nível e intensidade dentro de TODAS AS ÁREAS DE ATUAÇÃO DO GESTOR". Só considera cargos com pelo menos 2 pessoas com salário cadastrado (senão não existe "média" de verdade). Cargo é comparado pelo NOME (`position.name`, normalizado) e não pelo `positionId` porque, no cadastro, cargo é escopado por área (`@@unique([name, areaId])`) — duas áreas diferentes têm registros de `Position` DIFERENTES mesmo com o mesmo nome ("Analista" em Ipatinga ≠ "Analista" em Chapecó), então comparar por `positionId` nunca cruzaria área nenhuma. Só entra nessa regra quem também tem score bom (≥75) ou tempo de casa longo (2+ anos) — defasagem salarial sozinha, sem desempenho ou tempo de casa, não vira alerta.
+3. **Reconhecimento pendente** — 3+ anos de casa com score consistentemente bom (≥75), independente de ter dado salarial cadastrado ou não (pra não depender só de salário).
+
+Limitado a 6 alertas por PDF (prioriza desenvolvimento > retenção > reconhecimento), pra não estourar o espaço de uma página.
+
+**Acesso ao salário:** confirmado com o Erick — só o próprio gestor que está gerando a One Page vê o valor (nunca o número exato do salário aparece no PDF, só o percentual de defasagem e o selo "Risco de retenção"), mesmo escopo de acesso que o Dossiê Confidencial já tem hoje (visível só pra ADMIN/GESTOR, nunca pro colaborador).
+
+**PDF:** A4 PAISAGEM (novo — o relatório individual continua RETRATO) — `PulseReportPdfService.generatePdf()` ganhou um terceiro parâmetro opcional `{ landscape }`, default `false`, então a chamada do relatório individual não muda em nada. Novo método `buildOnePageHtml()` no mesmo serviço, reaproveitando a mesma engine Puppeteer/Chromium já configurada pra produção (seção do `railpack.json`/`aptPackages: chromium`).
+
+**Limitação conhecida, documentada:** com muitas áreas ou muitos colaboradores por área, o conteúdo pode não caber inteiro numa página só e o Puppeteer geraria uma segunda página automaticamente — o PDF sai correto, só deixa de ser "uma página" garantida em times muito grandes. Não é um bug, é o trade-off natural de um resumo executivo denso; se isso incomodar na prática, dá pra revisitar com paginação por área ou reduzindo o nível de detalhe por colaborador.
+
 ### 5.46 Correção — horários exibidos sem fuso horário explícito
 
 Erick percebeu horários de acesso na Auditoria aparentemente "no futuro" em relação ao horário real de Brasília. Causa: **10 pontos do sistema** formatavam data/hora com `toLocaleString('pt-BR')`/`toLocaleDateString('pt-BR')` **sem especificar o fuso horário** — nesse caso, o JavaScript usa o fuso de quem processa a renderização, que no Next.js pode ser o **servidor** (Railway, rodando em UTC) na primeira passada, antes do navegador da pessoa corrigir — causando exibição incorreta em certas condições.

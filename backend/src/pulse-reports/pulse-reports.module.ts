@@ -18,11 +18,19 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { PulseEvaluationStatus, PulseEvaluationType, PulseReportStatus, UserRole, AuditAction } from '@prisma/client';
+import { PulseCycleStatus, PulseEvaluationStatus, PulseEvaluationType, PulseReportStatus, UserRole, AuditAction } from '@prisma/client';
 import { IsOptional, IsString, MinLength } from 'class-validator';
 import { AnthropicModule } from '../anthropic/anthropic.module';
 import { AnthropicService } from '../anthropic/anthropic.service';
-import { PulseReportPdfService } from './pulse-report-pdf.service';
+import {
+  PulseReportPdfService,
+  firstSentence,
+  OnePageData,
+  OnePageArea,
+  OnePageColaborador,
+  OnePageRhAlerta,
+} from './pulse-report-pdf.service';
+import { areaGroupWhere } from '../common/cycle-area.util';
 import type { Response } from 'express';
 
 type AuthUser = { id: string; role: UserRole; areaId: string | null };
@@ -471,12 +479,292 @@ export class PulseReportsService {
   }
 }
 
+// v1.8.0 — One Page Executiva (seção 5.60, pedido do Erick): resumo de UMA
+// PÁGINA com todas as áreas geridas pelo gestor logado — score geral,
+// score/pontos de cada colaborador por área, e sinalizações pro RH. Reúne
+// dados que hoje já existem espalhados (PulseScore, PulseAiAnalysis, Dossiê
+// Confidencial) — não recalcula nada do motor de score, só lê o que já foi
+// consolidado.
+//
+// Mesma banda de score do resto do sistema (Excepcional…Crítico) — duplicada
+// aqui de propósito (não importada de pulse-cycles.module.ts) pra evitar
+// import circular entre os dois módulos, que já se importam um ao outro na
+// direção contrária. Qualquer mudança nos limiares de `SCORE_BANDS` em
+// pulse-cycles.module.ts precisa ser replicada aqui também.
+const ONE_PAGE_SCORE_BANDS: [number, string][] = [
+  [90, 'Excepcional'],
+  [80, 'Excelente'],
+  [70, 'Muito Bom'],
+  [60, 'Adequado'],
+  [50, 'Atenção'],
+  [0, 'Crítico'],
+];
+function onePageScoreBand(score: number): string {
+  for (const [min, label] of ONE_PAGE_SCORE_BANDS) {
+    if (score >= min) return label;
+  }
+  return 'Crítico';
+}
+const ZONA_VERDE_BANDS = new Set(['Excepcional', 'Excelente', 'Muito Bom']);
+
+function tenureLabel(dataInicioEmpresa: Date | null): string {
+  if (!dataInicioEmpresa) return '—';
+  const now = new Date();
+  let months =
+    (now.getFullYear() - dataInicioEmpresa.getFullYear()) * 12 + (now.getMonth() - dataInicioEmpresa.getMonth());
+  if (now.getDate() < dataInicioEmpresa.getDate()) months -= 1;
+  months = Math.max(0, months);
+  const years = Math.floor(months / 12);
+  const remMonths = months % 12;
+  if (years === 0) return `${remMonths}m`;
+  if (remMonths === 0) return `${years}a`;
+  return `${years}a ${remMonths}m`;
+}
+function tenureMonths(dataInicioEmpresa: Date | null): number {
+  if (!dataInicioEmpresa) return 0;
+  const now = new Date();
+  let months =
+    (now.getFullYear() - dataInicioEmpresa.getFullYear()) * 12 + (now.getMonth() - dataInicioEmpresa.getMonth());
+  if (now.getDate() < dataInicioEmpresa.getDate()) months -= 1;
+  return Math.max(0, months);
+}
+
+@Injectable()
+export class OnePageExecutivaService {
+  constructor(private prisma: PrismaService) {}
+
+  async build(requesterId: string): Promise<OnePageData> {
+    const gestor = await this.prisma.user.findUniqueOrThrow({
+      where: { id: requesterId },
+      select: {
+        fullName: true,
+        position: { select: { name: true } },
+        managedAreas: { select: { id: true, name: true } },
+      },
+    });
+
+    if (gestor.managedAreas.length === 0) {
+      throw new BadRequestException('Você não gerencia nenhuma área ainda — não há o que resumir.');
+    }
+
+    // Liderados diretos (mesma base usada no Dashboard do Gestor — seção
+    // 5.55), com o que o Dossiê Confidencial já guarda (salário, data de
+    // início) e o cargo (nome do cargo é escopado por área no cadastro,
+    // mas aqui comparamos só pelo NOME — pedido explícito do Erick: "cargos
+    // de mesmo nível e intensidade dentro de todas as áreas do gestor").
+    const team = await this.prisma.user.findMany({
+      where: { managerId: requesterId, active: true },
+      select: {
+        id: true,
+        fullName: true,
+        areaId: true,
+        salario: true,
+        dataInicioEmpresa: true,
+        position: { select: { name: true } },
+      },
+    });
+
+    const areasOut: OnePageArea[] = [];
+    // Coleta cross-área (todas as áreas geridas) pra benchmarking salarial
+    // por NOME do cargo — pedido explícito do Erick.
+    const salaryByPosition = new Map<string, { total: number; count: number }>();
+    // Dados brutos por pessoa, guardados à parte pra rodar as regras de RH
+    // só depois de ter a média salarial de TODOS os cargos calculada.
+    const rawPeople: {
+      fullName: string;
+      areaName: string;
+      positionName: string | null;
+      salario: number | null;
+      score: number | null;
+      scoreBand: string | null;
+      prevScore: number | null;
+      tenureLabel: string;
+      tenureMonths: number;
+    }[] = [];
+
+    let scoreSum = 0;
+    let scoreCount = 0;
+
+    for (const area of gestor.managedAreas) {
+      const areaCycle = await this.prisma.pulseCycle.findFirst({
+        where: {
+          status: { in: [PulseCycleStatus.FINALIZADO, PulseCycleStatus.ARQUIVADO] },
+          ...areaGroupWhere([area.id]),
+        },
+        select: { id: true, label: true, openedAt: true },
+        orderBy: { openedAt: 'desc' },
+      });
+      if (!areaCycle) continue; // área sem ciclo consolidado ainda — fica de fora do resumo
+
+      const membrosDaArea = team.filter((t) => t.areaId === area.id);
+      if (membrosDaArea.length === 0) continue;
+
+      const colaboradores: OnePageColaborador[] = [];
+      let areaScoreSum = 0;
+      let areaScoreCount = 0;
+
+      for (const membro of membrosDaArea) {
+        const [pulseScore, pulseReport] = await Promise.all([
+          this.prisma.pulseScore.findUnique({
+            where: { cycleId_userId: { cycleId: areaCycle.id, userId: membro.id } },
+          }),
+          this.prisma.pulseReport.findFirst({
+            where: { cycleId: areaCycle.id, ownerId: membro.id },
+            include: { aiAnalysis: true },
+          }),
+        ]);
+
+        // Score do ciclo ANTERIOR do mesmo colaborador (não necessariamente
+        // desta mesma área — a pessoa pode ter mudado, mas o normal é
+        // continuar na mesma), só pra detectar queda relevante (seção 5.60).
+        const prevScore = await this.prisma.pulseScore.findFirst({
+          where: { userId: membro.id, cycle: { openedAt: { lt: areaCycle.openedAt ?? new Date() } } },
+          orderBy: { cycle: { openedAt: 'desc' } },
+          select: { finalScore: true },
+        });
+
+        const score = pulseScore?.finalScore ?? null;
+        const band = score !== null ? onePageScoreBand(score) : null;
+        if (score !== null) {
+          areaScoreSum += score;
+          areaScoreCount += 1;
+        }
+
+        const positionName = membro.position?.name ?? null;
+        const salarioNum = membro.salario !== null ? Number(membro.salario) : null;
+        if (positionName && salarioNum !== null) {
+          const key = positionName.trim().toLowerCase();
+          const entry = salaryByPosition.get(key) ?? { total: 0, count: 0 };
+          entry.total += salarioNum;
+          entry.count += 1;
+          salaryByPosition.set(key, entry);
+        }
+
+        colaboradores.push({
+          fullName: membro.fullName,
+          positionName,
+          tenureLabel: tenureLabel(membro.dataInicioEmpresa),
+          score,
+          scoreBand: band,
+          pontoForte: firstSentence(pulseReport?.aiAnalysis?.strengths ?? null),
+          pontoMelhoria: firstSentence(pulseReport?.aiAnalysis?.improvements ?? null),
+        });
+
+        rawPeople.push({
+          fullName: membro.fullName,
+          areaName: area.name,
+          positionName,
+          salario: salarioNum,
+          score,
+          scoreBand: band,
+          prevScore: prevScore?.finalScore ?? null,
+          tenureLabel: tenureLabel(membro.dataInicioEmpresa),
+          tenureMonths: tenureMonths(membro.dataInicioEmpresa),
+        });
+      }
+
+      const scoreArea = areaScoreCount > 0 ? areaScoreSum / areaScoreCount : null;
+      if (scoreArea !== null) {
+        scoreSum += scoreArea;
+        scoreCount += 1;
+      }
+
+      areasOut.push({
+        areaName: area.name,
+        scoreArea,
+        scoreBandArea: scoreArea !== null ? onePageScoreBand(scoreArea) : null,
+        colaboradores,
+      });
+    }
+
+    // Score geral do gestor = média das médias de cada área (pedido
+    // explícito do Erick: "a média geral do Score de todas as suas áreas"
+    // — cada área pesa igual, não pondera pelo número de colaboradores).
+    const scoreGeral = scoreCount > 0 ? scoreSum / scoreCount : null;
+    const bandGeral = scoreGeral !== null ? onePageScoreBand(scoreGeral) : null;
+
+    // Regras de RH (seção 5.60) — prioridade: desempenho em queda/baixo >
+    // risco de retenção salarial > reconhecimento pendente. Cada pessoa
+    // entra com no máximo UM sinalizador, o mais relevante.
+    const rhAlertas: OnePageRhAlerta[] = [];
+    for (const p of rawPeople) {
+      if (p.score !== null && p.score < 60) {
+        rhAlertas.push({
+          fullName: p.fullName,
+          areaName: p.areaName,
+          motivo: `Score ${Math.round(p.score)} neste ciclo (banda ${p.scoreBand}) — recomenda-se plano de desenvolvimento com o gestor.`,
+          flagLabel: 'Plano de desenvolvimento',
+          flagKind: 'desenvolvimento',
+        });
+        continue;
+      }
+      if (p.score !== null && p.prevScore !== null && p.prevScore - p.score >= 10) {
+        rhAlertas.push({
+          fullName: p.fullName,
+          areaName: p.areaName,
+          motivo: `Queda de ${Math.round(p.prevScore - p.score)} pontos em relação ao ciclo anterior (${Math.round(p.prevScore)} → ${Math.round(p.score)}).`,
+          flagLabel: 'Plano de desenvolvimento',
+          flagKind: 'desenvolvimento',
+        });
+        continue;
+      }
+
+      const key = p.positionName?.trim().toLowerCase();
+      const group = key ? salaryByPosition.get(key) : undefined;
+      if (p.salario !== null && group && group.count >= 2) {
+        const avg = group.total / group.count;
+        const pctBelow = avg > 0 ? Math.round((1 - p.salario / avg) * 100) : 0;
+        const isHighPerformer = (p.score !== null && p.score >= 75) || p.tenureMonths >= 24;
+        if (pctBelow >= 8 && isHighPerformer) {
+          rhAlertas.push({
+            fullName: p.fullName,
+            areaName: p.areaName,
+            motivo: `Salário ${pctBelow}% abaixo da média do cargo "${p.positionName}" entre as áreas geridas (score ${p.score !== null ? Math.round(p.score) : '—'}, ${p.tenureLabel} de casa).`,
+            flagLabel: 'Risco de retenção',
+            flagKind: 'retencao',
+          });
+          continue;
+        }
+      }
+
+      if (p.tenureMonths >= 36 && p.score !== null && p.score >= 75) {
+        rhAlertas.push({
+          fullName: p.fullName,
+          areaName: p.areaName,
+          motivo: `${p.tenureLabel} de casa com desempenho consistente (score ${Math.round(p.score)}) — considere reconhecimento ou plano de carreira.`,
+          flagLabel: 'Reconhecimento pendente',
+          flagKind: 'reconhecimento',
+        });
+      }
+    }
+
+    // Prioriza desenvolvimento > retenção > reconhecimento, e corta em 6
+    // pra não estourar o espaço de uma página só.
+    const kindOrder: Record<OnePageRhAlerta['flagKind'], number> = { desenvolvimento: 0, retencao: 1, reconhecimento: 2 };
+    rhAlertas.sort((a, b) => kindOrder[a.flagKind] - kindOrder[b.flagKind]);
+
+    return {
+      gestor: { fullName: gestor.fullName, positionName: gestor.position?.name ?? null },
+      cicloResumo: 'Ciclo mais recente finalizado/arquivado de cada área',
+      geradoEm: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      scoreGeral,
+      bandGeral,
+      totalColaboradores: areasOut.reduce((sum, a) => sum + a.colaboradores.length, 0),
+      totalAreas: gestor.managedAreas.length,
+      areasEmZonaVerde: areasOut.filter((a) => a.scoreBandArea && ZONA_VERDE_BANDS.has(a.scoreBandArea)).length,
+      areas: areasOut,
+      rhAlertas: rhAlertas.slice(0, 6),
+    };
+  }
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller('pulse-reports')
 class PulseReportsController {
   constructor(
     private pulseReportsService: PulseReportsService,
     private pdfService: PulseReportPdfService,
+    private onePageService: OnePageExecutivaService,
   ) {}
 
   @UseGuards(RolesGuard)
@@ -496,6 +784,29 @@ class PulseReportsController {
   @Get('mine')
   findMine(@Req() req: { user: AuthUser }) {
     return this.pulseReportsService.findMine(req.user.id);
+  }
+
+  // v1.8.0 — One Page Executiva (seção 5.60). Precisa vir ANTES de ':id' —
+  // senão o Nest trataria "one-page" como um id de relatório.
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.GESTOR)
+  @Audit(AuditAction.GERACAO_PDF)
+  @Get('one-page/pdf')
+  async getOnePagePdf(@Req() req: { user: AuthUser }, @Res() res: Response) {
+    const data = await this.onePageService.build(req.user.id);
+    const html = this.pdfService.buildOnePageHtml(data);
+    const buffer = await this.pdfService.generatePdf(
+      html,
+      { top: '0mm', bottom: '0mm', left: '0mm', right: '0mm' },
+      { landscape: true },
+    );
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="one-page-executiva-${data.gestor.fullName.replace(/\s+/g, '-')}.pdf"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
   }
 
   @Get(':id')
@@ -551,7 +862,7 @@ class PulseReportsController {
 @Module({
   imports: [AnthropicModule],
   controllers: [PulseReportsController],
-  providers: [PulseReportsService, PulseReportPdfService],
+  providers: [PulseReportsService, PulseReportPdfService, OnePageExecutivaService],
   exports: [PulseReportsService, PulseReportPdfService],
 })
 export class PulseReportsModule {}
