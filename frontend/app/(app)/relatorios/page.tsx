@@ -27,12 +27,19 @@ export default function RelatoriosPage() {
   // v1.8.3 — pedido do Erick: antes o Relatório Executivo sempre pegava o
   // último ciclo fechado por trás dos panos, sem avisar nem deixar
   // escolher. Agora, ao clicar no botão, abre esse seletor com os ciclos
-  // fechados disponíveis (mais recente já vem marcado) — só gera o PDF
-  // depois de confirmar.
+  // fechados disponíveis.
+  //
+  // v1.8.5 — pedido do Erick (voz, 20/09): quando o Pulse é aberto
+  // SEPARADO por área (um ciclo por área, em vez de um ciclo único pra
+  // todas), escolher um ciclo só não dava "o valor real de todas" — cada
+  // área ficava de fora se não fosse a dona do ciclo escolhido. Virou
+  // seleção MÚLTIPLA (checkboxes); nada vem pré-marcado por padrão — o
+  // gestor escolhe manualmente quais ciclos entram (confirmado com o
+  // Erick).
   const [showCycleModal, setShowCycleModal] = useState(false);
   const [cycleOptions, setCycleOptions] = useState<OnePageCycleOption[]>([]);
   const [loadingCycles, setLoadingCycles] = useState(false);
-  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
+  const [selectedCycleIds, setSelectedCycleIds] = useState<string[]>([]);
 
   async function openCycleModal() {
     setOnePageError('');
@@ -41,7 +48,7 @@ export default function RelatoriosPage() {
     try {
       const cycles = await api.get<OnePageCycleOption[]>('/pulse-reports/one-page/cycles');
       setCycleOptions(cycles);
-      setSelectedCycleId(cycles[0]?.id ?? null);
+      setSelectedCycleIds([]);
     } catch (err) {
       setOnePageError(err instanceof Error ? err.message : 'Erro ao buscar os ciclos disponíveis.');
       setShowCycleModal(false);
@@ -50,12 +57,16 @@ export default function RelatoriosPage() {
     }
   }
 
+  function toggleCycle(id: string) {
+    setSelectedCycleIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
+  }
+
   async function handleGenerateOnePage() {
-    if (!selectedCycleId) return;
+    if (selectedCycleIds.length === 0) return;
     setGeneratingOnePage(true);
     setOnePageError('');
     try {
-      const blob = await api.getBlob(`/pulse-reports/one-page/pdf?cycleId=${selectedCycleId}`);
+      const blob = await api.getBlob(`/pulse-reports/one-page/pdf?cycleIds=${selectedCycleIds.join(',')}`);
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
@@ -138,9 +149,10 @@ export default function RelatoriosPage() {
       {showCycleModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-p-primary-dark/50 px-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-7">
-            <h2 className="text-base font-bold text-p-primary-dark mb-1">Qual ciclo Pulse?</h2>
+            <h2 className="text-base font-bold text-p-primary-dark mb-1">Quais ciclos Pulse?</h2>
             <p className="text-sm text-p-neutral mb-5">
-              O Relatório Executivo é gerado a partir de um ciclo fechado específico. Escolha qual.
+              Marque um ou mais ciclos fechados. Se você abriu o Pulse separado por área, marque todos pra ter o
+              valor real de cada uma no mesmo relatório.
             </p>
 
             {loadingCycles ? (
@@ -151,21 +163,35 @@ export default function RelatoriosPage() {
               </p>
             ) : (
               <div className="flex flex-col gap-2 mb-5 max-h-64 overflow-y-auto">
-                {cycleOptions.map((cycle, idx) => (
-                  <button
-                    key={cycle.id}
-                    type="button"
-                    onClick={() => setSelectedCycleId(cycle.id)}
-                    className={`text-left px-3 py-2.5 rounded-lg border text-sm transition-colors ${
-                      selectedCycleId === cycle.id
-                        ? 'bg-p-primary/10 border-p-primary text-p-primary-dark font-medium'
-                        : 'border-slate-200 hover:border-p-primary text-p-primary-dark'
-                    }`}
-                  >
-                    {cycle.label}
-                    {idx === 0 && <span className="ml-2 text-[10px] font-semibold text-p-primary uppercase">Mais recente</span>}
-                  </button>
-                ))}
+                {cycleOptions.map((cycle, idx) => {
+                  const checked = selectedCycleIds.includes(cycle.id);
+                  return (
+                    <button
+                      key={cycle.id}
+                      type="button"
+                      onClick={() => toggleCycle(cycle.id)}
+                      className={`flex items-center gap-3 text-left px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+                        checked
+                          ? 'bg-p-primary/10 border-p-primary text-p-primary-dark font-medium'
+                          : 'border-slate-200 hover:border-p-primary text-p-primary-dark'
+                      }`}
+                    >
+                      <span
+                        className={`flex items-center justify-center w-4 h-4 rounded border shrink-0 ${
+                          checked ? 'bg-p-primary border-p-primary text-white' : 'border-slate-300'
+                        }`}
+                      >
+                        {checked && (
+                          <svg viewBox="0 0 16 16" width="10" height="10" fill="none">
+                            <path d="M3 8.5L6.5 12L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </span>
+                      <span className="flex-1">{cycle.label}</span>
+                      {idx === 0 && <span className="text-[10px] font-semibold text-p-primary uppercase shrink-0">Mais recente</span>}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -182,10 +208,10 @@ export default function RelatoriosPage() {
               <button
                 type="button"
                 onClick={handleGenerateOnePage}
-                disabled={!selectedCycleId || generatingOnePage || loadingCycles}
+                disabled={selectedCycleIds.length === 0 || generatingOnePage || loadingCycles}
                 className="flex-1 bg-p-primary text-white py-2.5 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
               >
-                {generatingOnePage ? 'Gerando...' : 'Gerar PDF'}
+                {generatingOnePage ? 'Gerando...' : `Gerar PDF${selectedCycleIds.length > 0 ? ` (${selectedCycleIds.length})` : ''}`}
               </button>
             </div>
           </div>
