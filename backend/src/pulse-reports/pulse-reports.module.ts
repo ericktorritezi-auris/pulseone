@@ -24,7 +24,7 @@ import { AnthropicModule } from '../anthropic/anthropic.module';
 import { AnthropicService } from '../anthropic/anthropic.service';
 import {
   PulseReportPdfService,
-  firstSentence,
+  topSentences,
   OnePageData,
   OnePageArea,
   OnePageColaborador,
@@ -580,6 +580,7 @@ export class OnePageExecutivaService {
       prevScore: number | null;
       tenureLabel: string;
       tenureMonths: number;
+      topStrength: string | null;
     }[] = [];
 
     let scoreSum = 0;
@@ -640,14 +641,17 @@ export class OnePageExecutivaService {
           salaryByPosition.set(key, entry);
         }
 
+        const pontosForte = topSentences(pulseReport?.aiAnalysis?.strengths ?? null, 3);
+        const pontosMelhoria = topSentences(pulseReport?.aiAnalysis?.improvements ?? null, 3);
+
         colaboradores.push({
           fullName: membro.fullName,
           positionName,
           tenureLabel: tenureLabel(membro.dataInicioEmpresa),
           score,
           scoreBand: band,
-          pontoForte: firstSentence(pulseReport?.aiAnalysis?.strengths ?? null),
-          pontoMelhoria: firstSentence(pulseReport?.aiAnalysis?.improvements ?? null),
+          pontosForte,
+          pontosMelhoria,
         });
 
         rawPeople.push({
@@ -660,6 +664,7 @@ export class OnePageExecutivaService {
           prevScore: prevScore?.finalScore ?? null,
           tenureLabel: tenureLabel(membro.dataInicioEmpresa),
           tenureMonths: tenureMonths(membro.dataInicioEmpresa),
+          topStrength: pontosForte[0] ?? null,
         });
       }
 
@@ -683,9 +688,12 @@ export class OnePageExecutivaService {
     const scoreGeral = scoreCount > 0 ? scoreSum / scoreCount : null;
     const bandGeral = scoreGeral !== null ? onePageScoreBand(scoreGeral) : null;
 
-    // Regras de RH (seção 5.60) — prioridade: desempenho em queda/baixo >
-    // risco de retenção salarial > reconhecimento pendente. Cada pessoa
-    // entra com no máximo UM sinalizador, o mais relevante.
+    // Regras de RH (seção 5.60/5.61) — prioridade: desempenho em queda/baixo >
+    // valorização. Cada pessoa entra com no máximo UM sinalizador, o mais
+    // relevante. A partir da v1.8.1 (pedido do Erick), "valorização" e
+    // "retenção" foram unificados num único flag, mostrando SEMPRE 3 motivos
+    // de valorização antes de qualquer número de salário, e considerando
+    // nessa análise apenas quem tem mais de 1 ano de casa (tenureMonths > 12).
     const rhAlertas: OnePageRhAlerta[] = [];
     for (const p of rawPeople) {
       if (p.score !== null && p.score < 60) {
@@ -709,38 +717,45 @@ export class OnePageExecutivaService {
         continue;
       }
 
-      const key = p.positionName?.trim().toLowerCase();
-      const group = key ? salaryByPosition.get(key) : undefined;
-      if (p.salario !== null && group && group.count >= 2) {
-        const avg = group.total / group.count;
-        const pctBelow = avg > 0 ? Math.round((1 - p.salario / avg) * 100) : 0;
-        const isHighPerformer = (p.score !== null && p.score >= 75) || p.tenureMonths >= 24;
-        if (pctBelow >= 8 && isHighPerformer) {
-          rhAlertas.push({
-            fullName: p.fullName,
-            areaName: p.areaName,
-            motivo: `Salário ${pctBelow}% abaixo da média do cargo "${p.positionName}" entre as áreas geridas (score ${p.score !== null ? Math.round(p.score) : '—'}, ${p.tenureLabel} de casa).`,
-            flagLabel: 'Risco de retenção',
-            flagKind: 'retencao',
-          });
-          continue;
-        }
-      }
+      // Valorização: só entra quem tem mais de 1 ano de casa E desempenho
+      // forte (score >= 75). Regra explícita do Erick: "sempre considerar
+      // nessa avaliação funcionários com mais de 1 ano de casa".
+      if (p.tenureMonths > 12 && p.score !== null && p.score >= 75) {
+        const destaques: string[] = [
+          `Score ${Math.round(p.score)} (banda ${p.scoreBand}) neste ciclo — desempenho consistente.`,
+          `${p.tenureLabel} de casa, com histórico de entrega dentro da área.`,
+          p.topStrength ?? 'Destaque recorrente nas avaliações de sua equipe.',
+        ];
 
-      if (p.tenureMonths >= 36 && p.score !== null && p.score >= 75) {
+        let salarioLinha: string;
+        const key = p.positionName?.trim().toLowerCase();
+        const group = key ? salaryByPosition.get(key) : undefined;
+        if (p.salario !== null && group && group.count >= 2) {
+          const avg = group.total / group.count;
+          const pctBelow = avg > 0 ? Math.round((1 - p.salario / avg) * 100) : 0;
+          if (pctBelow >= 1) {
+            salarioLinha = `Salário ${pctBelow}% abaixo da média do cargo "${p.positionName}" entre as áreas geridas.`;
+          } else {
+            salarioLinha = `Salário alinhado ou acima da média do cargo "${p.positionName}" entre as áreas geridas.`;
+          }
+        } else {
+          salarioLinha = 'Sem dado salarial comparável suficiente para este cargo entre as áreas geridas.';
+        }
+
         rhAlertas.push({
           fullName: p.fullName,
           areaName: p.areaName,
-          motivo: `${p.tenureLabel} de casa com desempenho consistente (score ${Math.round(p.score)}) — considere reconhecimento ou plano de carreira.`,
-          flagLabel: 'Reconhecimento pendente',
-          flagKind: 'reconhecimento',
+          destaques,
+          salarioLinha,
+          flagLabel: 'Valorização',
+          flagKind: 'valorizacao',
         });
       }
     }
 
-    // Prioriza desenvolvimento > retenção > reconhecimento, e corta em 6
-    // pra não estourar o espaço de uma página só.
-    const kindOrder: Record<OnePageRhAlerta['flagKind'], number> = { desenvolvimento: 0, retencao: 1, reconhecimento: 2 };
+    // Prioriza desenvolvimento > valorização, e corta em 6 pra não estourar
+    // o espaço de uma página só.
+    const kindOrder: Record<OnePageRhAlerta['flagKind'], number> = { desenvolvimento: 0, valorizacao: 1 };
     rhAlertas.sort((a, b) => kindOrder[a.flagKind] - kindOrder[b.flagKind]);
 
     return {

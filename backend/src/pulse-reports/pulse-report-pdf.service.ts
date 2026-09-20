@@ -93,14 +93,32 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-// Corta um texto de análise (parágrafo da IA) num "ponto" curto de uma
-// linha só, pra caber no card compacto do colaborador — pega a primeira
-// frase e trunca se ainda assim for longa demais.
-export function firstSentence(text: string | null, maxLen = 70): string | null {
-  if (!text) return null;
-  const sentence = text.split(/(?<=[.!?])\s+/)[0]?.trim() || text.trim();
-  if (sentence.length <= maxLen) return sentence;
-  return sentence.slice(0, maxLen - 1).trimEnd() + '…';
+// Corta uma frase longa demais na última PALAVRA que ainda cabe (nunca no
+// meio de uma palavra) — pedido do Erick (v1.8.1): o corte no meio da
+// palavra/frase "parecia cortado" na tela, feio de ver num documento pra
+// Diretoria.
+function truncateAtWord(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  const slice = text.slice(0, maxLen);
+  const lastSpace = slice.lastIndexOf(' ');
+  const safe = lastSpace > maxLen * 0.5 ? slice.slice(0, lastSpace) : slice;
+  return safe.trimEnd() + '…';
+}
+
+// v1.8.1 — pedido do Erick: 1 frase só (com corte no meio) "cortava" a
+// análise demais. Agora extrai ATÉ 3 frases do parágrafo da IA (cada uma
+// truncada com segurança na palavra, nunca no meio dela), pra virar 3
+// pontos de destaque / 3 pontos de melhoria por colaborador, em vez de 1
+// linha só. Retorna [] (não null) quando não há texto — mais fácil de
+// checar `.length === 0` no template.
+export function topSentences(text: string | null, maxCount = 3, maxLenEach = 90): string[] {
+  if (!text) return [];
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const source = sentences.length > 0 ? sentences : [text.trim()];
+  return source.slice(0, maxCount).map((s) => truncateAtWord(s, maxLenEach));
 }
 
 export interface OnePageColaborador {
@@ -109,8 +127,9 @@ export interface OnePageColaborador {
   tenureLabel: string;
   score: number | null;
   scoreBand: string | null;
-  pontoForte: string | null;
-  pontoMelhoria: string | null;
+  // v1.8.1 — pedido do Erick: 3 pontos cada (era 1 frase truncada demais).
+  pontosForte: string[];
+  pontosMelhoria: string[];
 }
 
 export interface OnePageArea {
@@ -120,12 +139,21 @@ export interface OnePageArea {
   colaboradores: OnePageColaborador[];
 }
 
+// v1.8.1 — pedido do Erick: "reconhecimento pendente" e "risco de retenção"
+// viraram um único sinalizador "valorização" — 3 pontos de POR QUE o RH
+// deveria valorizar essa pessoa, e só DEPOIS a defasagem salarial (não o
+// contrário). "Plano de desenvolvimento" continua separado (é sobre
+// desempenho a corrigir agora, não sobre valorizar).
 export interface OnePageRhAlerta {
   fullName: string;
   areaName: string;
-  motivo: string;
   flagLabel: string;
-  flagKind: 'retencao' | 'reconhecimento' | 'desenvolvimento';
+  flagKind: 'valorizacao' | 'desenvolvimento';
+  // Preenchido só quando flagKind === 'valorizacao'.
+  destaques?: string[];
+  salarioLinha?: string;
+  // Preenchido só quando flagKind === 'desenvolvimento'.
+  motivo?: string;
 }
 
 export interface OnePageData {
@@ -142,8 +170,7 @@ export interface OnePageData {
 }
 
 const RH_FLAG_CLASS: Record<OnePageRhAlerta['flagKind'], { bg: string; color: string }> = {
-  retencao: { bg: '#ffe3e3', color: '#8a1f1f' },
-  reconhecimento: { bg: '#e6f6e6', color: '#1c6b1c' },
+  valorizacao: { bg: '#e6f6e6', color: '#1c6b1c' },
   desenvolvimento: { bg: '#fef2df', color: '#8a5c05' },
 };
 
@@ -267,28 +294,46 @@ export class PulseReportPdfService {
       .map((area) => {
         const areaColor = semaforoColor(area.scoreBandArea);
         const areaBg = semaforoBg(area.scoreBandArea);
+        const bulletList = (items: string[], color: string) =>
+          items.length > 0
+            ? `<ul style="margin:1px 0 0;padding-left:9px;">${items
+                .map((t) => `<li style="font-size:6.8px;line-height:1.35;color:${color};margin-bottom:0.5px;">${escapeHtml(t)}</li>`)
+                .join('')}</ul>`
+            : '';
+
         const peopleHtml = area.colaboradores
           .map((p) => {
             const color = semaforoColor(p.scoreBand);
+            const hasAnalise = p.pontosForte.length > 0 || p.pontosMelhoria.length > 0;
             return `
-            <div style="border-bottom:1px dashed #dfe3ea;padding-bottom:4px;margin-bottom:4px;">
+            <div style="break-inside:avoid;border-bottom:1px dashed #dfe3ea;padding-bottom:5px;margin-bottom:5px;">
               <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;">
-                <span style="font-size:8.6px;font-weight:700;">${escapeHtml(p.fullName)}</span>
-                <span style="font-size:7px;color:#8890a2;flex-shrink:0;">${escapeHtml(p.tenureLabel)}</span>
-                <span style="font-size:8.6px;font-weight:800;color:${color};flex-shrink:0;">${p.score !== null ? Math.round(p.score) : '—'}</span>
+                <span style="font-size:8.8px;font-weight:700;">${escapeHtml(p.fullName)}</span>
+                <span style="font-size:7px;color:#8890a2;flex-shrink:0;">${escapeHtml(p.tenureLabel)} de casa</span>
+                <span style="font-size:8.8px;font-weight:800;color:${color};flex-shrink:0;">${p.score !== null ? Math.round(p.score) : '—'}</span>
               </div>
               ${p.positionName ? `<div style="font-size:6.8px;color:#8890a2;">${escapeHtml(p.positionName)}</div>` : ''}
-              <div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:2px;">
-                ${p.pontoForte ? `<span style="font-size:6.6px;padding:0.5px 4px;border-radius:6px;font-weight:600;background:#e6f6e6;color:#1c6b1c;">${escapeHtml(p.pontoForte)}</span>` : ''}
-                ${p.pontoMelhoria ? `<span style="font-size:6.6px;padding:0.5px 4px;border-radius:6px;font-weight:600;background:#fef2df;color:#8a5c05;">${escapeHtml(p.pontoMelhoria)}</span>` : ''}
-                ${!p.pontoForte && !p.pontoMelhoria ? `<span style="font-size:6.6px;color:#8890a2;">Sem análise IA gerada</span>` : ''}
-              </div>
+              ${
+                hasAnalise
+                  ? `
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:2px;">
+                <div>
+                  <div style="font-size:6.2px;font-weight:700;text-transform:uppercase;color:#1c6b1c;">Pontos fortes</div>
+                  ${bulletList(p.pontosForte, '#1c6b1c') || '<span style="font-size:6.6px;color:#8890a2;">—</span>'}
+                </div>
+                <div>
+                  <div style="font-size:6.2px;font-weight:700;text-transform:uppercase;color:#8a5c05;">A desenvolver</div>
+                  ${bulletList(p.pontosMelhoria, '#8a5c05') || '<span style="font-size:6.6px;color:#8890a2;">—</span>'}
+                </div>
+              </div>`
+                  : `<div style="font-size:6.6px;color:#8890a2;margin-top:2px;">Sem análise IA gerada para este colaborador neste ciclo.</div>`
+              }
             </div>`;
           })
           .join('');
 
         return `
-        <div style="border:1px solid #dfe3ea;border-radius:8px;background:#fff;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="break-inside:avoid;border:1px solid #dfe3ea;border-radius:8px;background:#fff;display:flex;flex-direction:column;overflow:hidden;">
           <div style="padding:4px 6px;background:#f6f7fa;border-bottom:1px solid #dfe3ea;display:flex;justify-content:space-between;align-items:center;">
             <div>
               <div style="font-size:9.5px;font-weight:800;">${escapeHtml(area.areaName)}</div>
@@ -303,14 +348,28 @@ export class PulseReportPdfService {
       })
       .join('');
 
+    // v1.8.1 — pedido do Erick: pra quem é "valorização", mostra 3 pontos
+    // de POR QUE valorizar primeiro, e SÓ DEPOIS a defasagem salarial —
+    // nunca o contrário (o salário é a consequência, não a manchete).
     const rhItemsHtml = data.rhAlertas
       .map((r) => {
         const flagStyle = RH_FLAG_CLASS[r.flagKind];
+        const body =
+          r.flagKind === 'valorizacao'
+            ? `
+          ${
+            r.destaques && r.destaques.length > 0
+              ? `<ul style="margin:2px 0 0;padding-left:10px;">${r.destaques.map((d) => `<li style="margin-bottom:1px;">${escapeHtml(d)}</li>`).join('')}</ul>`
+              : ''
+          }
+          ${r.salarioLinha ? `<div style="margin-top:3px;padding-top:3px;border-top:1px dashed #f0d9d0;font-weight:600;">${escapeHtml(r.salarioLinha)}</div>` : ''}`
+            : `<div style="margin-top:2px;">${escapeHtml(r.motivo ?? '')}</div>`;
+
         return `
-        <div style="background:#fff;border:1px solid #f0d9d0;border-radius:6px;padding:4px 6px;font-size:7.4px;line-height:1.35;">
-          <b style="font-size:8px;">${escapeHtml(r.fullName)}</b> — ${escapeHtml(r.areaName)}<br/>
-          ${escapeHtml(r.motivo)}
-          <div><span style="display:inline-block;font-size:6.4px;font-weight:700;padding:0.5px 5px;border-radius:6px;margin-top:2px;background:${flagStyle.bg};color:${flagStyle.color};">${escapeHtml(r.flagLabel)}</span></div>
+        <div style="break-inside:avoid;background:#fff;border:1px solid #f0d9d0;border-radius:6px;padding:5px 7px;font-size:7.4px;line-height:1.4;">
+          <b style="font-size:8.2px;">${escapeHtml(r.fullName)}</b> — ${escapeHtml(r.areaName)}
+          ${body}
+          <div><span style="display:inline-block;font-size:6.4px;font-weight:700;padding:0.5px 5px;border-radius:6px;margin-top:3px;background:${flagStyle.bg};color:${flagStyle.color};">${escapeHtml(r.flagLabel)}</span></div>
         </div>`;
       })
       .join('');
@@ -338,11 +397,19 @@ export class PulseReportPdfService {
   .tile-value { font-size:14px; font-weight:800; line-height:1.1; }
   .chart-card { border:1px solid #dfe3ea; border-radius:8px; padding:6px 10px; margin-bottom:8px; }
   .chart-title { font-size:8px; font-weight:700; color:#52586a; text-transform:uppercase; margin-bottom:5px; }
-  .areas-grid { display:grid; grid-template-columns: repeat(${Math.max(1, Math.min(5, data.areas.length))}, 1fr); gap:8px; margin-bottom:8px; }
+  /* v1.8.1: flex-wrap em vez de grid de colunas fixas — com 3 pontos de
+     força/melhoria por pessoa, o card de cada área ficou mais alto e
+     variável; grid fixo cortava/espremia mal quando o conteúdo excede uma
+     página. Flex-wrap deixa cada área virar bloco próprio (com
+     break-inside:avoid inline), que o Chromium consegue empurrar pra
+     página seguinte inteiro quando não cabe, em vez de cortar no meio. */
+  .areas-grid { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+  .areas-grid > div { flex: 1 1 ${Math.floor(100 / Math.max(1, Math.min(4, data.areas.length)))}%; min-width:210px; }
   .rh-band { border:1px solid #f0c8c8; border-radius:8px; background:#fff8f5; padding:6px 10px; display:grid; grid-template-columns: 1fr 3fr; gap:10px; align-items:center; }
   .rh-title { font-size:9px; font-weight:800; color:#8a1f1f; }
   .rh-sub { font-size:7px; color:#7a4a30; margin-top:1px; }
-  .rh-items { display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; }
+  .rh-items { display:flex; flex-wrap:wrap; gap:6px; }
+  .rh-items > div { flex: 1 1 30%; min-width:200px; }
   .footer { display:flex; justify-content:space-between; font-size:6.6px; color:#8890a2; border-top:1px solid #dfe3ea; padding-top:4px; margin-top:8px; }
 </style>
 </head>
